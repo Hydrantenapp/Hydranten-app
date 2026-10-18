@@ -40,7 +40,7 @@ const ZUSTAENDE = [
 ];
 // Defekt-Auswahlliste – Standard-Prüfpunkte
 const DEFEKT_OPTIONEN = [
-  "0. Hydrant nicht kontrolliert – zugeparkt",
+  "0. Zugeparkt",
   "1. Schild fehlt/defekt",
   "2. Bemaßung Hydrant falsch",
   "3. Nummer fehlt/falsch",
@@ -91,12 +91,12 @@ function zustandColor(z) {
 }
 
 // Kartenfarbe je nach konkret ausgewählter(n) Defekt-Art(en), nicht nur nach grobem Zustand:
-// "0. Hydrant nicht kontrolliert – zugeparkt" -> grau
+// "0. Zugeparkt" -> grau
 // 1, 2, 3, 4, 7, 9 -> gelb
 // 5, 6, 8, 10, 11, 12 -> rot
 // Sind mehrere Kategorien gleichzeitig angekreuzt, hat grau Vorrang vor rot vor gelb.
 // Frühere Schreibweisen von Defekt-Texten: werden beim Laden/Import automatisch auf den aktuellen Text umgestellt
-const DEFEKT_ALIASE = [["9. Klappendeckel fehlt", "9. Kappendeckel fehlt"]];
+const DEFEKT_ALIASE = [["9. Klappendeckel fehlt", "9. Kappendeckel fehlt"], ["0. Hydrant nicht kontrolliert – zugeparkt", "0. Zugeparkt"]];
 function normalisiereBesonderheiten(text) {
   let t = text || "";
   for (const [alt, neu] of DEFEKT_ALIASE) if (t.includes(alt)) t = t.split(alt).join(neu);
@@ -135,6 +135,20 @@ function statusPillFarben(h) {
   if (nummern.includes(0)) return { color: "#4B5563", bg: "#F3F4F6" };
   return { color: "#C22E2E", bg: "#FBE9E9" }; // Fallback wie oben
 }
+
+// Beschriftung des Status-Pills passend zur Farbkategorie: rot = Defekt, gelb = Bedingt defekt, grau = Zugeparkt.
+// Der gespeicherte Zustand bleibt unverändert "defekt" (nur die Anzeige ist feiner).
+function statusLabel(h) {
+  if (h.zustand !== "defekt") return zustandLabel(h.zustand);
+  const nummern = ausgewaehlteDefektNummern(h);
+  if (nummern.some((n) => DEFEKT_ROT_NUMMERN.includes(n))) return "Defekt";
+  if (nummern.some((n) => DEFEKT_GELB_NUMMERN.includes(n))) return "Bedingt defekt";
+  if (nummern.includes(0)) return "Zugeparkt";
+  return "Defekt";
+}
+
+// Hydranten im (selbst angelegten) Bezirk "Sonder" zählen in keiner Statistik als Hydrant mit.
+function istSonderBezirk(h) { return (h.bezirk || "").trim().toLowerCase() === "sonder"; }
 
 /* ---------- IndexedDB Wrapper (rein lokal, funktioniert offline) ---------- */
 function openDB() {
@@ -802,7 +816,7 @@ function zeigeNeutralInHk(h) {
 
 function berechneStatistik() {
   const startdatum = state.kontrollStartdatum;
-  const hydranten = state.hydranten.filter((h) => h.einheit === STATISTIK_EINHEIT);
+  const hydranten = state.hydranten.filter((h) => h.einheit === STATISTIK_EINHEIT && !istSonderBezirk(h));
   const bezirke = {};
   hydranten.forEach((h) => {
     const b = (h.bezirk || "").trim() || "(ohne Bezirk)";
@@ -826,7 +840,8 @@ function berechneStatistik() {
 // Einheitenübergreifend (nicht auf LZ Kleve beschränkt) - fehlende Koordinaten sind ein
 // Datenqualitätsthema für die gesamte Wehr, nicht nur für eine Einheit.
 function berechneKoordinatenLuecken() {
-  const fehlend = state.hydranten.filter((h) => typeof h.lat !== "number" || typeof h.lng !== "number");
+  const zaehlbar = state.hydranten.filter((h) => !istSonderBezirk(h));
+  const fehlend = zaehlbar.filter((h) => typeof h.lat !== "number" || typeof h.lng !== "number");
   const bezirke = {};
   fehlend.forEach((h) => {
     const b = (h.bezirk || "").trim() || "(ohne Bezirk)";
@@ -835,7 +850,7 @@ function berechneKoordinatenLuecken() {
   });
   Object.values(bezirke).forEach((liste) => liste.sort(vergleicheStrasseHausnummer));
   return {
-    gesamt: state.hydranten.length,
+    gesamt: zaehlbar.length,
     anzahlFehlend: fehlend.length,
     bezirke,
     bezirkNamen: Object.keys(bezirke).sort((a, b) => a.localeCompare(b, "de", { numeric: true })),
@@ -848,7 +863,7 @@ function berechneKoordinatenLuecken() {
 // nur für App-Admin einsehbar) - technisch bedingt kann diese Benachrichtigung nur auf dem Gerät
 // erscheinen, auf dem gerade gespeichert wird, nicht auf einem separaten Admin-Gerät.
 function pruefeBezirkAbschluss(h) {
-  if (h.einheit !== STATISTIK_EINHEIT || !h.bezirk || !state.kontrollStartdatum) return;
+  if (h.einheit !== STATISTIK_EINHEIT || !h.bezirk || !state.kontrollStartdatum || istSonderBezirk(h)) return;
   const bezirk = h.bezirk.trim();
   if (!bezirk) return;
   const bezirkHydranten = state.hydranten.filter((x) => x.einheit === STATISTIK_EINHEIT && (x.bezirk || "").trim() === bezirk);
@@ -949,7 +964,7 @@ function hydrantRowHTML(h, opts) {
   // seit Beginn der laufenden Kontrollrunde noch nicht neu geprüft wurde - siehe zeigeNeutralInHk().
   const neutral = opts.directEdit && zeigeNeutralInHk(h);
   const pillFarbe = neutral ? { color: "#6b7280", bg: "#F3F4F6" } : statusPillFarben(h);
-  const pillLabel = neutral ? "Nicht kontrolliert" : zustandLabel(h.zustand);
+  const pillLabel = neutral ? "Nicht kontrolliert" : statusLabel(h);
   // Bei "Defekt" (und solange der Status nicht neutral ausgeblendet ist) wird nach dem Bezirk
   // zusätzlich angezeigt, welche konkrete(n) Defekt-Art(en) angekreuzt wurden.
   const defektDetails = (!neutral && h.zustand === "defekt")
@@ -1529,7 +1544,7 @@ function renderDetail(h) {
             ${h.einheit ? `${esc(h.einheit)} · ` : ""}${h.durchfluss ? `${esc(h.durchfluss)} · ` : ""}${h.nrNeu ? `Nr. ${esc(h.nrNeu)}` : "keine neue Nr."}${h.nrAlt ? ` · alt: ${esc(h.nrAlt)}` : ""}${h.bezirk ? ` · Bezirk ${esc(h.bezirk)}` : ""}
           </p>
         </div>
-        <span class="pill" style="color:${statusPillFarben(h).color};background:${statusPillFarben(h).bg};">${esc(zustandLabel(h.zustand))}</span>
+        <span class="pill" style="color:${statusPillFarben(h).color};background:${statusPillFarben(h).bg};">${esc(statusLabel(h))}</span>
       </div>
       ${dist != null ? `<p style="color:#A72920;font-weight:600;font-size:14px;margin:10px 0 0;">${fmtDist(dist)} von deinem Standort entfernt</p>` : ""}
       <p class="mono" style="margin:8px 0 0;">${typeof h.lat === "number" && typeof h.lng === "number" ? `${h.lat.toFixed(6)}, ${h.lng.toFixed(6)}` : "📍 Keine Koordinaten hinterlegt – über \"Bearbeiten\" → \"Aktuellen Standort verwenden\" ergänzen"}</p>

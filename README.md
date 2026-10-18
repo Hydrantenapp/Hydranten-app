@@ -247,3 +247,7 @@ ohne die App-Shell neu schreiben zu müssen.
 ## Startbild
 - Beim Öffnen zeigt die App ein Startbild (Logo auf Dunkelblau) und blendet es nach dem Laden aus.
 - Manifest: Hintergrundfarbe passend zum Logo, eigene „maskable“-Icons mit Rand, damit nichts abgeschnitten wird.
+
+## Statuswörter und Bezirk „Sonder“
+- Gelb markierte Hydranten (Defekt 1, 2, 3, 4, 7, 9) heißen jetzt **„Bedingt defekt“**, graue (Defekt 0) **„Zugeparkt“**, rote bleiben **„Defekt“**. Gespeichert wird weiterhin der Zustand „defekt“; nur die Anzeige ist feiner. Die Auswahl „0. Zugeparkt“ ersetzt den alten Text automatisch.
+- Hydranten im Bezirk **„Sonder“** zählen in der Statistik (Gesamtübersicht, Bezirke, Abschluss-Meldungen, Koordinaten-Lücken) nicht als Hydrant mit.
