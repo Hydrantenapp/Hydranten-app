@@ -970,8 +970,10 @@ function hydrantRowHTML(h, opts) {
   const defektDetails = (!neutral && h.zustand === "defekt")
     ? ausgewaehlteDefektNummern(h).map((n) => DEFEKT_OPTIONEN.find((opt) => opt.startsWith(n + "."))).filter(Boolean)
     : [];
-  const nrLine = [h.einheit ? esc(h.einheit) : null, h.durchfluss ? esc(h.durchfluss) : null, h.nrNeu ? `Nr. ${esc(h.nrNeu)}` : null, h.nrAlt ? `(alt: ${esc(h.nrAlt)})` : null, h.bezirk ? `Bez. ${esc(h.bezirk)}` : null].filter(Boolean).join(" ");
-  const defektHTML = defektDetails.length > 0 ? ` <span style="color:${pillFarbe.color};font-weight:600;">⚠ ${defektDetails.map(esc).join(", ")}</span>` : "";
+  // Reihenfolge der Zeilen: Nummer (neu/alt) -> Defekt -> Bezirk · Einheit -> Lage
+  const nrLine = [h.nrNeu ? `Nr. ${esc(h.nrNeu)}` : null, h.nrAlt ? `(alt: ${esc(h.nrAlt)})` : null].filter(Boolean).join(" ");
+  const defektHTML = defektDetails.length > 0 ? `<div class="hydrant-sub hydrant-sub-wrap" style="color:${pillFarbe.color};font-weight:600;">⚠ ${defektDetails.map(esc).join(", ")}</div>` : "";
+  const ortLine = [h.bezirk ? `Bez. ${esc(h.bezirk)}` : null, h.einheit ? esc(h.einheit) : null, h.durchfluss ? esc(h.durchfluss) : null].filter(Boolean).join(" · ");
   return `
   <button class="hydrant-row" ${attrName}="${h.id}">
     <div class="hydrant-icon">
@@ -979,7 +981,10 @@ function hydrantRowHTML(h, opts) {
     </div>
     <div class="hydrant-main">
       <div class="hydrant-name">${esc(h.name)} ${locked ? '<span class="lock-icon" title="Nur Ansicht">🔒</span>' : ""}${keineKoordinaten ? '<span class="lock-icon" title="Keine Koordinaten hinterlegt">📍</span>' : ""}</div>
-      <div class="hydrant-sub">${[nrLine + defektHTML || null, h.lage ? esc(h.lage) : null].filter(Boolean).join(" · ")}</div>
+      ${nrLine ? `<div class="hydrant-sub">${nrLine}</div>` : ""}
+      ${defektHTML}
+      ${ortLine ? `<div class="hydrant-sub">${ortLine}</div>` : ""}
+      ${h.lage ? `<div class="hydrant-sub">${esc(h.lage)}</div>` : ""}
     </div>
     <div class="hydrant-meta">
       ${h.dist != null ? `<span class="dist">${fmtDist(h.dist)}</span>` : ""}
