@@ -263,3 +263,6 @@ Angekreuzte Defekt-Arten werden beim Speichern immer als eigene Zeile übernomme
 
 ## Passwörter vergeben
 In der Konten-Seite (App-Admin): „Neues Passwort erzeugen“ (16 Zeichen in 4 Gruppen, ohne verwechselbare Zeichen) oder „Eigenes Passwort setzen“. Das Passwort wird nach dem Anlegen oder Ändern **einmalig** mit Kopieren-Knopf angezeigt und nirgends gespeichert; bestehende Passwörter lassen sich nicht nachlesen (nur als Hash gespeichert).
+
+## Statistik je Einheit
+Auf der Statistik-Seite (App-Admin) und in der Statistik-Ansicht der Stadtwerke wählt man oben die **Einheit**. Es erscheinen nur Einheiten mit Hydranten (Bezirk „Sonder“ zählt nicht). Die Kontrollrunde (Startdatum) gilt für alle Einheiten gemeinsam. Die gespeicherte Abschluss-Meldung mit Datum gibt es weiter nur für LZ Kleve; bei anderen Einheiten erscheint die Meldung „komplett abgeschlossen“ ohne Datum, sobald alles fertig ist.

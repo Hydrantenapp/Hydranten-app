@@ -362,6 +362,7 @@ const state = {
   kontrollGesamtAbschlussdatum: null, // wird automatisch gesetzt, sobald wirklich alle Bezirke fertig sind
   neuesArchivJahr: null, // gesetzt, wenn beim App-Start automatisch ein neues Jahresarchiv erstellt wurde
   archivListe: [], // im Reiter "Daten" angezeigte Liste vorhandener Jahresarchive
+  statistikEinheit: null, // gewählte Einheit auf der Statistik-Seite (null = Standard: LZ Kleve)
   statistikExpandedBezirk: null, // welcher Bezirk in der Statistik gerade aufgeklappt ist
   koordinatenExpandedBezirk: null, // eigener Aufklapp-State für die Koordinaten-Lücken-Übersicht
   statistikAbschnitte: {}, // { <schlüssel>: true/false } - aufklappbare Abschnitte (Statistik UND der neu strukturierte Daten-Tab der Stadtwerke teilen sich diese generische Struktur, eindeutige Schlüssel pro Abschnitt)
@@ -818,7 +819,9 @@ function alleBezirke() {
 }
 
 /* ---------- Statistik (aktuell nur LZ Kleve, siehe Anforderung) ---------- */
-const STATISTIK_EINHEIT = "LZ Kleve";
+// Die gespeicherten Abschluss-Meldungen ("Bezirk komplett", "Alle Bezirke komplett" mit Datum) beziehen sich weiterhin
+// nur auf diese Einheit. Die Statistik-Seite selbst kann für jede Einheit angezeigt werden (siehe statistikEinheit()).
+const ABSCHLUSS_EINHEIT = "LZ Kleve";
 let bereitsBenachrichtigteBezirke = new Set();
 
 function istHydrantFertig(h, startdatum) {
@@ -834,9 +837,24 @@ function zeigeNeutralInHk(h) {
   return !!state.kontrollStartdatum && !istHydrantFertig(h, state.kontrollStartdatum);
 }
 
-function berechneStatistik() {
+// Einheiten, für die es eine Statistik gibt: alle, die mindestens einen (zählenden) Hydranten haben.
+function statistikEinheiten() {
+  const anzahl = {};
+  state.hydranten.forEach((h) => { if (h.einheit && !istSonderBezirk(h)) anzahl[h.einheit] = (anzahl[h.einheit] || 0) + 1; });
+  const liste = EINHEITEN.filter((e) => anzahl[e]);
+  Object.keys(anzahl).forEach((e) => { if (!liste.includes(e)) liste.push(e); });
+  return { liste, anzahl };
+}
+function statistikEinheit() {
+  const { liste } = statistikEinheiten();
+  if (state.statistikEinheit && liste.includes(state.statistikEinheit)) return state.statistikEinheit;
+  return liste.includes(ABSCHLUSS_EINHEIT) ? ABSCHLUSS_EINHEIT : (liste[0] || ABSCHLUSS_EINHEIT);
+}
+
+function berechneStatistik(einheit) {
+  einheit = einheit || ABSCHLUSS_EINHEIT;
   const startdatum = state.kontrollStartdatum;
-  const hydranten = state.hydranten.filter((h) => h.einheit === STATISTIK_EINHEIT && !istSonderBezirk(h));
+  const hydranten = state.hydranten.filter((h) => h.einheit === einheit && !istSonderBezirk(h));
   const bezirke = {};
   hydranten.forEach((h) => {
     const b = (h.bezirk || "").trim() || "(ohne Bezirk)";
@@ -849,6 +867,7 @@ function berechneStatistik() {
   const gesamtFertig = hydranten.filter((h) => istHydrantFertig(h, startdatum)).length;
   return {
     startdatum,
+    einheit,
     gesamt: hydranten.length,
     gesamtFertig,
     gesamtOffen: hydranten.length - gesamtFertig,
@@ -883,10 +902,10 @@ function berechneKoordinatenLuecken() {
 // nur für App-Admin einsehbar) - technisch bedingt kann diese Benachrichtigung nur auf dem Gerät
 // erscheinen, auf dem gerade gespeichert wird, nicht auf einem separaten Admin-Gerät.
 function pruefeBezirkAbschluss(h) {
-  if (h.einheit !== STATISTIK_EINHEIT || !h.bezirk || !state.kontrollStartdatum || istSonderBezirk(h)) return;
+  if (h.einheit !== ABSCHLUSS_EINHEIT || !h.bezirk || !state.kontrollStartdatum || istSonderBezirk(h)) return;
   const bezirk = h.bezirk.trim();
   if (!bezirk) return;
-  const bezirkHydranten = state.hydranten.filter((x) => x.einheit === STATISTIK_EINHEIT && (x.bezirk || "").trim() === bezirk);
+  const bezirkHydranten = state.hydranten.filter((x) => x.einheit === ABSCHLUSS_EINHEIT && (x.bezirk || "").trim() === bezirk);
   const alleFertig = bezirkHydranten.length > 0 && bezirkHydranten.every((x) => istHydrantFertig(x, state.kontrollStartdatum));
   if (alleFertig && !bereitsBenachrichtigteBezirke.has(bezirk)) {
     bereitsBenachrichtigteBezirke.add(bezirk);
@@ -921,7 +940,7 @@ async function pruefeGesamtAbschluss() {
 function zeigeGesamtAbschlussBenachrichtigung() {
   const el = document.createElement("div");
   el.className = "bezirk-fertig-banner bezirk-fertig-banner-gross";
-  el.innerHTML = `🏆 <strong>Alle Bezirke von ${esc(STATISTIK_EINHEIT)}</strong> sind komplett abgearbeitet!`;
+  el.innerHTML = `🏆 <strong>Alle Bezirke von ${esc(ABSCHLUSS_EINHEIT)}</strong> sind komplett abgearbeitet!`;
   el.addEventListener("click", () => el.remove());
   document.body.appendChild(el);
   setTimeout(() => el.remove(), 6000);
@@ -2130,6 +2149,13 @@ function setupStatistikInhaltHandlers() {
     render();
   });
 
+  const einheitSel = document.getElementById("statistik-einheit-select");
+  if (einheitSel) einheitSel.addEventListener("change", () => {
+    state.statistikEinheit = einheitSel.value;
+    state.statistikExpandedBezirk = null;
+    render();
+  });
+
   document.querySelectorAll(".statistik-bezirk-header").forEach((btn) => {
     btn.addEventListener("click", () => {
       const b = btn.dataset.bezirk;
@@ -3052,26 +3078,40 @@ function statistikAbschnittHTML(key, titel, kurzstatus, inhaltHTML) {
   `;
 }
 
+// Auswahl der Einheit oben auf der Statistik (für App-Admin und die Stadtwerke-Ansicht gleich).
+function statistikEinheitAuswahlHTML() {
+  const { liste, anzahl } = statistikEinheiten();
+  if (liste.length === 0) return "";
+  const aktuell = statistikEinheit();
+  return `
+    <div class="field" style="margin-bottom:12px;">
+      <span class="lbl">Einheit</span>
+      <select id="statistik-einheit-select" class="bezirk-select" style="font-weight:600;">
+        ${liste.map((e) => `<option value="${esc(e)}" ${e === aktuell ? "selected" : ""}>${esc(e)} (${anzahl[e]} Hydranten)</option>`).join("")}
+      </select>
+    </div>`;
+}
+
 // Gemeinsamer Inhalt der Statistik (Kontrollrunde + Gesamtübersicht + Koordinaten-Lücken-Link),
 // wiederverwendet von der App-Admin-eigenen Statistikseite UND der in "Daten" eingebetteten
 // Statistik-Ansicht von Stadtwerke/Wehrführung (siehe renderDatenEingeschraenkt()).
 function statistikInhaltHTML(opts) {
   opts = opts || {};
   const nurUebersicht = !!opts.nurUebersicht;
-  const stat = berechneStatistik();
+  const stat = berechneStatistik(statistikEinheit());
   const quote = stat.gesamt > 0 ? Math.round((stat.gesamtFertig / stat.gesamt) * 100) : 0;
 
   const gesamtKurzstatus = `${stat.gesamtFertig} fertig, ${stat.gesamtOffen} offen`;
   const gesamtInhalt = `
     <div class="hero-box" style="margin-top:0;">
-      <div class="hero-eyebrow">Gesamt ${esc(STATISTIK_EINHEIT)}</div>
+      <div class="hero-eyebrow">Gesamt ${esc(stat.einheit)}</div>
       <div class="hero-big">${stat.gesamtFertig} <span style="font-size:20px;opacity:0.7;">/ ${stat.gesamt}</span></div>
       <div class="hero-sub">${stat.gesamtFertig} fertig, ${stat.gesamtOffen} offen (${quote}\u00A0%)</div>
     </div>
 
     <button type="button" id="btn-statistik-drucken" class="btn btn-outline btn-full" style="margin-bottom:14px;">🖨 Bezirks-Übersicht ausdrucken</button>
 
-    ${stat.bezirkNamen.length === 0 ? `<div class="empty-state">Noch keine Hydranten für ${esc(STATISTIK_EINHEIT)} vorhanden.</div>` : stat.bezirkNamen.map((b) => {
+    ${stat.bezirkNamen.length === 0 ? `<div class="empty-state">Noch keine Hydranten für ${esc(stat.einheit)} vorhanden.</div>` : stat.bezirkNamen.map((b) => {
       const d = stat.bezirke[b];
       const komplett = d.offen === 0;
       const aufgeklappt = state.statistikExpandedBezirk === b;
@@ -3104,7 +3144,7 @@ function statistikInhaltHTML(opts) {
 
   // "Nur Übersicht" (z.B. Stadtwerke): ausschließlich die Gesamtübersicht direkt anzeigen, ohne
   // eigene Kontrollrunde starten/verwalten zu können und ohne den Koordinaten-Lücken-Link.
-  if (nurUebersicht) return gesamtInhalt;
+  if (nurUebersicht) return statistikEinheitAuswahlHTML() + gesamtInhalt;
 
   const kontrollrundeKurzstatus = state.kontrollStartdatum ? `seit ${esc(state.kontrollStartdatum)}` : "nicht gestartet";
   const kontrollrundeInhalt = `
@@ -3113,6 +3153,7 @@ function statistikInhaltHTML(opts) {
     ` : `
       <p style="font-size:13px;color:#9CA3AF;margin:0 0 10px;">Noch keine Kontrollrunde gestartet – solange kein Startdatum gesetzt ist, gilt kein Hydrant als "fertig".</p>
     `}
+    <p style="font-size:11.5px;color:#6b7280;margin:0 0 10px;">Die Kontrollrunde gilt für alle Einheiten gemeinsam.</p>
     ${fieldHTML("statistik-startdatum", "Startdatum", `<input type="date" id="statistik-startdatum" value="${esc(state.kontrollStartdatum || "")}" />`)}
     <div class="row-2">
       ${fieldHTML("statistik-enddatum1", "Erstes Enddatum (nur zur Übersicht)", `<input type="date" id="statistik-enddatum1" value="${esc(state.kontrollEnddatum1 || "")}" />`)}
@@ -3127,15 +3168,23 @@ function statistikInhaltHTML(opts) {
   `;
 
   return `
+    ${statistikEinheitAuswahlHTML()}
+
     <button type="button" id="btn-koordinaten-oeffnen" class="info-link-row" style="border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,0.05);margin-bottom:14px;">
       <span>📍 Hydranten ohne Koordinaten (alle Einheiten)</span><span class="info-link-chevron">›</span>
     </button>
 
-    ${state.kontrollGesamtAbschlussdatum ? `
+    ${stat.einheit === ABSCHLUSS_EINHEIT
+      ? (state.kontrollGesamtAbschlussdatum ? `
       <div class="card statistik-abschluss-karte">
         🏆 Alle Bezirke komplett abgeschlossen am <strong>${esc(state.kontrollGesamtAbschlussdatum)}</strong>
       </div>
-    ` : ""}
+    ` : "")
+      : (state.kontrollStartdatum && stat.gesamt > 0 && stat.gesamtOffen === 0 ? `
+      <div class="card statistik-abschluss-karte">
+        🏆 Alle Bezirke von ${esc(stat.einheit)} sind in dieser Kontrollrunde komplett abgeschlossen.
+      </div>
+    ` : "")}
 
     ${statistikAbschnittHTML("kontrollrunde", "🚦 Kontrollrunde", kontrollrundeKurzstatus, kontrollrundeInhalt)}
     ${statistikAbschnittHTML("gesamt", "📊 Gesamtübersicht", gesamtKurzstatus, gesamtInhalt)}
@@ -3145,8 +3194,8 @@ function statistikInhaltHTML(opts) {
 function renderStatistik() {
   return `
     <button class="back-link" id="btn-statistik-back">‹ Zurück</button>
-    <h2 style="font-weight:600;margin:0 0 4px;">Statistik – ${esc(STATISTIK_EINHEIT)}</h2>
-    <p style="font-size:12px;color:#9CA3AF;margin:0 0 14px;">Weitere Einheiten folgen später. Abschnitte antippen zum Auf-/Zuklappen.</p>
+    <h2 style="font-weight:600;margin:0 0 4px;">Statistik – ${esc(statistikEinheit())}</h2>
+    <p style="font-size:12px;color:#9CA3AF;margin:0 0 14px;">Einheit oben wählen. Abschnitte antippen zum Auf-/Zuklappen.</p>
     ${statistikInhaltHTML()}
   `;
 }
@@ -3160,7 +3209,7 @@ function renderKoordinatenUebersicht() {
   return `
     <button class="back-link" id="btn-koordinaten-back">‹ Zurück</button>
     <h2 style="font-weight:600;margin:0 0 4px;">Hydranten ohne Koordinaten</h2>
-    <p style="font-size:12px;color:#9CA3AF;margin:0 0 14px;">Einheitenübergreifend – nicht auf ${esc(STATISTIK_EINHEIT)} beschränkt.</p>
+    <p style="font-size:12px;color:#9CA3AF;margin:0 0 14px;">Einheitenübergreifend – nicht auf eine Einheit beschränkt.</p>
 
     <div class="hero-box">
       <div class="hero-eyebrow">Fehlende Koordinaten</div>
@@ -3202,7 +3251,7 @@ function renderKoordinatenUebersicht() {
 function renderStatistikDruckansicht(stat, quote) {
   return `
     <div id="statistik-druckansicht">
-      <h1>Hydranten-Kontrollstatistik – ${esc(STATISTIK_EINHEIT)}</h1>
+      <h1>Hydranten-Kontrollstatistik – ${esc(stat.einheit)}</h1>
       <p>Ausgedruckt am ${esc(todayStr())}</p>
       ${state.kontrollStartdatum ? `<p>Kontrollrunde seit: ${esc(state.kontrollStartdatum)}</p>` : `<p>Keine Kontrollrunde gestartet.</p>`}
       ${state.kontrollEnddatum1 ? `<p>Ziel 1: ${esc(state.kontrollEnddatum1)}</p>` : ""}

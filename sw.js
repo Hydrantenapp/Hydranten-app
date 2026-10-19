@@ -1,4 +1,4 @@
-const CACHE_NAME = "hydranten-app-v17";
+const CACHE_NAME = "hydranten-app-v18";
 const PRECACHE_URLS = [
   "./",
   "./index.html",
