@@ -260,3 +260,6 @@ Umkreis-Auswahl für die Einsatzleitung: beim Setzen des Einsatzorts sind zunäc
 
 ## Defekt-Arten und freier Text
 Angekreuzte Defekt-Arten werden beim Speichern immer als eigene Zeile übernommen. Wird direkt hinter einen Defekt-Text weitergetippt, trennt die App ihn ab, statt ihn zu verlieren.
+
+## Passwörter vergeben
+In der Konten-Seite (App-Admin): „Neues Passwort erzeugen“ (16 Zeichen in 4 Gruppen, ohne verwechselbare Zeichen) oder „Eigenes Passwort setzen“. Das Passwort wird nach dem Anlegen oder Ändern **einmalig** mit Kopieren-Knopf angezeigt und nirgends gespeichert; bestehende Passwörter lassen sich nicht nachlesen (nur als Hash gespeichert).

@@ -1732,6 +1732,58 @@ function renderDatenAppAdmin() {
 }
 
 /* ---------- Konten (App-Admin) ---------- */
+// Zufälliges, gut lesbares Passwort: 4 Gruppen à 4 Zeichen (ohne leicht verwechselbare Zeichen wie 0/O und 1/l/I)
+function erzeugePasswort() {
+  const alphabet = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  const grenze = 256 - (256 % alphabet.length); // Werte darüber werden verworfen, damit jedes Zeichen gleich wahrscheinlich ist
+  const zeichen = [];
+  while (zeichen.length < 16) {
+    const buf = new Uint8Array(32);
+    crypto.getRandomValues(buf);
+    for (let i = 0; i < buf.length && zeichen.length < 16; i++) {
+      if (buf[i] < grenze) zeichen.push(alphabet[buf[i] % alphabet.length]);
+    }
+  }
+  return [0, 4, 8, 12].map((i) => zeichen.slice(i, i + 4).join("")).join("-");
+}
+
+async function textKopieren(text) {
+  try { await navigator.clipboard.writeText(text); return true; } catch (e) {}
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0";
+    document.body.appendChild(ta); ta.select();
+    const ok = document.execCommand("copy");
+    ta.remove();
+    return ok;
+  } catch (e) { return false; }
+}
+
+// Zeigt Benutzername und Passwort EINMAL an (nach Anlegen oder Neuvergabe). Das Passwort wird nirgends
+// gespeichert und ist danach nicht mehr abrufbar - wer es vergisst, bekommt ein neues.
+function zeigeZugangsdaten(rolle, benutzername, passwort) {
+  const link = location.origin;
+  const overlay = document.createElement("div");
+  overlay.className = "janein-overlay";
+  overlay.innerHTML = `
+    <div class="janein-box" style="max-width:360px;">
+      <p class="janein-frage" style="font-weight:600;margin-bottom:10px;">Zugangsdaten für ${esc(rolle)}</p>
+      <div class="zugang-zeile"><span class="zugang-label">Benutzername</span><code class="zugang-wert">${esc(benutzername)}</code></div>
+      <div class="zugang-zeile"><span class="zugang-label">Passwort</span><code class="zugang-wert zugang-pw">${esc(passwort)}</code></div>
+      <p style="font-size:12px;color:#B45309;background:#FFFBEB;border-radius:8px;padding:8px 10px;margin:12px 0;line-height:1.5;">Das Passwort wird nur jetzt angezeigt und ist danach nicht mehr abrufbar. Bitte jetzt kopieren und weitergeben.</p>
+      <div class="janein-btns">
+        <button type="button" class="btn btn-outline zugang-kopieren">Kopieren</button>
+        <button type="button" class="btn btn-primary zugang-fertig">Fertig</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  overlay.querySelector(".zugang-kopieren").addEventListener("click", async () => {
+    const ok = await textKopieren(`Hydranten-App\nLink: ${link}\nBenutzername: ${benutzername}\nPasswort: ${passwort}`);
+    showToast(ok ? "Zugangsdaten kopiert" : "Kopieren nicht möglich - bitte abschreiben");
+  });
+  overlay.querySelector(".zugang-fertig").addEventListener("click", () => overlay.remove());
+}
+
 async function kontenAufruf(body) {
   const { data, error } = await sb.functions.invoke("konten-verwalten", { body });
   if (error) {
@@ -1754,7 +1806,10 @@ function renderKonten() {
       <div class="konto-zeile" style="background:#fff;border-radius:12px;padding:10px 12px;margin-bottom:8px;box-shadow:0 1px 3px rgba(0,0,0,0.05);">
         <div style="font-weight:600;">${esc(x.rolle)}</div>
         <div style="font-size:12px;color:#6B7280;margin-bottom:6px;">Benutzername: <code>${esc(x.benutzername)}</code></div>
-        <button type="button" class="btn btn-sm konto-pw-btn" data-uid="${esc(x.user_id)}" data-rolle="${esc(x.rolle)}">Passwort ändern</button>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button type="button" class="btn btn-sm btn-primary konto-gen-btn" data-uid="${esc(x.user_id)}" data-rolle="${esc(x.rolle)}" data-name="${esc(x.benutzername)}">Neues Passwort erzeugen</button>
+          <button type="button" class="btn btn-sm konto-pw-btn" data-uid="${esc(x.user_id)}" data-rolle="${esc(x.rolle)}">Eigenes Passwort setzen</button>
+        </div>
       </div>`).join("");
     const opts = k.ohne_konto.map((r) => `<option value="${esc(r)}">${esc(r)}</option>`).join("");
     const neu = k.ohne_konto.length === 0 ? `<p style="color:#6B7280;">Alle Rollen haben bereits ein Konto.</p>` : `
@@ -1763,13 +1818,14 @@ function renderKonten() {
       <div class="field" style="margin-top:8px;"><span class="lbl">Benutzername (Beispiel: lz-kleve)</span>
         <input type="text" id="konto-name" autocapitalize="none" autocorrect="off" spellcheck="false" autocomplete="off" /></div>
       <div class="field" style="margin-top:8px;"><span class="lbl">Passwort (mind. 12 Zeichen)</span>
-        <input type="password" id="konto-pass" autocomplete="new-password" /></div>
+        <input type="password" id="konto-pass" autocomplete="new-password" />
+        <button type="button" class="btn btn-sm" id="btn-konto-pw-erzeugen" style="margin-top:6px;">Passwort erzeugen</button></div>
       <p id="konto-fehler" class="error-text"></p>
       <button class="btn btn-primary btn-full" id="btn-konto-anlegen">Konto anlegen</button>`;
     inhalt = `
       <h3 style="margin:12px 0 8px;">Bestehende Konten</h3>${zeilen || "<p style='color:#6B7280;'>Noch keine Konten.</p>"}
       <h3 style="margin:16px 0 8px;">Neues Konto</h3>${neu}
-      <p style="font-size:11px;color:#9CA3AF;line-height:1.5;margin-top:14px;">Passwörter werden nur von dir hier eingegeben und nirgends angezeigt oder gespeichert. Intern lautet die Anmeldeadresse <code>benutzername@${LOGIN_DOMAIN}</code>.</p>`;
+      <p style="font-size:11px;color:#9CA3AF;line-height:1.5;margin-top:14px;">Passwörter werden nirgends gespeichert und lassen sich nicht nachlesen. Ein neu erzeugtes Passwort wird nur einmal angezeigt. Intern lautet die Anmeldeadresse <code>benutzername@${LOGIN_DOMAIN}</code>.</p>`;
   }
   return `
     <button class="back-link" id="btn-konten-back">‹ Zurück</button>
@@ -1792,6 +1848,23 @@ function setupKontenHandlers() {
   const neuLaden = document.getElementById("btn-konten-neu-laden");
   if (neuLaden) neuLaden.addEventListener("click", () => { state.konten = null; state.kontenFehler = null; render(); });
 
+  const pwErzeugen = document.getElementById("btn-konto-pw-erzeugen");
+  if (pwErzeugen) pwErzeugen.addEventListener("click", () => {
+    const feld = document.getElementById("konto-pass");
+    feld.value = erzeugePasswort();
+    feld.type = "text"; // sichtbar, damit es vor dem Anlegen kopiert oder notiert werden kann
+  });
+
+  document.querySelectorAll(".konto-gen-btn").forEach((b) => b.addEventListener("click", () => {
+    zeigeJaNeinDialog(`Neues Passwort für ${b.dataset.rolle} erzeugen? Das bisherige Passwort gilt dann nicht mehr.`, async () => {
+      const pw = erzeugePasswort();
+      try {
+        await kontenAufruf({ aktion: "passwort_setzen", user_id: b.dataset.uid, passwort: pw });
+        zeigeZugangsdaten(b.dataset.rolle, b.dataset.name, pw);
+      } catch (e) { alert(e.message); }
+    });
+  }));
+
   const anlegen = document.getElementById("btn-konto-anlegen");
   if (anlegen) anlegen.addEventListener("click", async () => {
     const errEl = document.getElementById("konto-fehler");
@@ -1805,6 +1878,7 @@ function setupKontenHandlers() {
       showToast(`Konto für ${rolle} angelegt`);
       state.konten = null;
       render();
+      zeigeZugangsdaten(rolle, benutzername, passwort);
     } catch (e) { errEl.textContent = e.message; anlegen.disabled = false; }
   });
 
