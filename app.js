@@ -349,7 +349,7 @@ const state = {
   einsatzleitungLivePin: null, // { lat, lng } - automatischer Standort-Pin beim Login der Einsatzleitung
   einsatzplanungModus: false, // true = "bitte auf Karte tippen, um Einsatzort zu setzen"
   einsatzplanungPin: null, // { lat, lng } - manuell gesetzter Einsatzort
-  einsatzplanungRadius: null, // null = "Alle", sonst Meter (100/200/500/1000/2000)
+  einsatzplanungRadius: null, // null = "Alle", sonst Meter (100/200/300/500/1000/2000)
 };
 
 async function loadData() {
@@ -1253,7 +1253,7 @@ function filteredListKarte() {
 
 function renderEinsatzplanungBlock() {
   if (state.session !== "Einsatzleitung") return "";
-  const radien = [100, 200, 500, 1000, 2000];
+  const radien = [100, 200, 300, 500, 1000, 2000];
   if (state.einsatzplanungModus) {
     return `
       <div class="card einsatzplanung-karte">
