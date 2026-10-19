@@ -349,7 +349,7 @@ const state = {
   einsatzleitungLivePin: null, // { lat, lng } - automatischer Standort-Pin beim Login der Einsatzleitung
   einsatzplanungModus: false, // true = "bitte auf Karte tippen, um Einsatzort zu setzen"
   einsatzplanungPin: null, // { lat, lng } - manuell gesetzter Einsatzort
-  einsatzplanungRadius: null, // null = "Alle", sonst Meter (100/200/300/500/1000/2000)
+  einsatzplanungRadius: null, // null = "Alle", sonst Meter (100/200/300/500/1000/2000); Standard beim Setzen: 300
 };
 
 async function loadData() {
@@ -1032,6 +1032,8 @@ function ensureLeafletMap(list, containerId, neutralModus) {
 
     leafletMap.on("click", (e) => {
       if (state.session === "Einsatzleitung" && state.einsatzplanungModus) {
+        // Beim erstmaligen Setzen gilt der Standard-Umkreis (300 m); bei "Neu setzen" bleibt die gewählte Auswahl.
+        if (!state.einsatzplanungPin) state.einsatzplanungRadius = 300;
         state.einsatzplanungPin = { lat: e.latlng.lat, lng: e.latlng.lng };
         state.einsatzplanungModus = false;
         render();

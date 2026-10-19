@@ -256,4 +256,4 @@ ohne die App-Shell neu schreiben zu müssen.
 Jede Zeile zeigt: Name, Nr. neu (alt), Defekt-Art (farbig, mehrzeilig), Bezirk · Einheit, Lage.
 
 ## Einsatzplanung
-Umkreis-Auswahl für die Einsatzleitung: Alle, 100 m, 200 m, 300 m, 500 m, 1 km, 2 km.
+Umkreis-Auswahl für die Einsatzleitung: beim Setzen des Einsatzorts ist 300 m voreingestellt; zusätzlich wählbar: Alle, 100 m, 200 m, 500 m, 1 km, 2 km.
