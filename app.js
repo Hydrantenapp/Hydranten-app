@@ -109,6 +109,26 @@ function normalisiereHydranten(liste) {
 const DEFEKT_GELB_NUMMERN = [1, 2, 3, 4, 7, 9];
 const DEFEKT_ROT_NUMMERN = [5, 6, 8, 10, 11, 12];
 
+// Baut den gespeicherten Text aus Formular: angekreuzte Defekt-Arten stehen immer als eigene Zeile,
+// frei getippter Text steht in weiteren Zeilen. Wurde direkt hinter einen Defekt-Text weitergetippt
+// (ohne Zeilenumbruch), wird der Defekt wieder abgetrennt, damit er erkannt wird und nicht verloren geht.
+function baueBesonderheiten(angekreuzt, freitext) {
+  const gewaehlt = new Set(angekreuzt);
+  const rest = [];
+  (freitext || "").split("\n").map((l) => l.trim()).filter(Boolean).forEach((zeile) => {
+    let l = zeile;
+    let gefunden = true;
+    while (gefunden && l) {
+      gefunden = false;
+      for (const opt of DEFEKT_OPTIONEN) {
+        if (l.startsWith(opt)) { gewaehlt.add(opt); l = l.slice(opt.length).trim(); gefunden = true; break; }
+      }
+    }
+    if (l) rest.push(l);
+  });
+  return [...DEFEKT_OPTIONEN.filter((o) => gewaehlt.has(o)), ...rest].join("\n");
+}
+
 function ausgewaehlteDefektNummern(h) {
   const lines = (h.besonderheiten || "").split("\n").map((l) => l.trim());
   return DEFEKT_OPTIONEN
@@ -2504,6 +2524,8 @@ function setupFormHandlers() {
         lines = lines.filter((l) => l !== cb.value);
       }
       ta.value = lines.join("\n");
+      // Endet der Text mit einer Defekt-Art, kommt eine leere Zeile dahinter: so beginnt weiterer Text in einer neuen Zeile.
+      if (lines.length && DEFEKT_OPTIONEN.includes(lines[lines.length - 1])) ta.value += "\n";
       aktualisiereDefektZusammenfassung();
     });
   });
@@ -2648,7 +2670,7 @@ function setupFormHandlers() {
       nrNeu, nrAlt, bezirk,
       lage: document.getElementById("f-lage").value.trim(),
       zustand: document.getElementById("f-zustand").value,
-      besonderheiten: document.getElementById("f-bes").value.trim(),
+      besonderheiten: baueBesonderheiten(Array.from(form.querySelectorAll(".defekt-checkbox")).filter((c) => c.checked).map((c) => c.value), document.getElementById("f-bes").value),
       letzteKontrolle: document.getElementById("f-datum").value || todayStr(),
       geaendertVon: state.session,
       historie, // vollständige Änderungshistorie - wird nicht in der App angezeigt, nur exportiert

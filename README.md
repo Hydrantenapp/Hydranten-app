@@ -257,3 +257,6 @@ Jede Zeile zeigt: Name, Nr. neu (alt), Defekt-Art (farbig, mehrzeilig), Bezirk �
 
 ## Einsatzplanung
 Umkreis-Auswahl für die Einsatzleitung: beim Setzen des Einsatzorts sind zunächst alle Hydranten sichtbar ("Alle"); wählbar: 100 m, 200 m, 300 m, 500 m, 1 km, 2 km.
+
+## Defekt-Arten und freier Text
+Angekreuzte Defekt-Arten werden beim Speichern immer als eigene Zeile übernommen. Wird direkt hinter einen Defekt-Text weitergetippt, trennt die App ihn ab, statt ihn zu verlieren.
