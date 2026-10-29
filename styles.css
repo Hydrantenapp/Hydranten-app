@@ -657,13 +657,17 @@ body {
 @keyframes splash-pop { from { transform: scale(.85); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { #splash img, .splash-spinner { animation: none; } }
 
-/* Urheberrechtshinweis (unauffällig, am Ende der Seite) */
-#content::after {
+/* Urheberrechtshinweis (unauffällig, immer sichtbar unten in der Navigationsleiste) */
+#bottom-nav { flex-wrap: wrap; }
+#bottom-nav::after {
   content: "© 2026 Simone Loosen, Feuerwehr Kleve · Alle Rechte vorbehalten";
-  display: block;
-  margin-top: 20px;
+  order: 10;
+  flex: 0 0 100%;
   text-align: center;
-  font-size: 11px;
+  font-size: 10px;
+  line-height: 1;
   color: #9CA3AF;
+  padding: 0 0 6px;
+  pointer-events: none;
 }
 .copyright-line { margin-top: 18px; text-align: center; font-size: 11px; color: #9CA3AF; }
