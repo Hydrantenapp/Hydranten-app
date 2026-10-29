@@ -1,3 +1,4 @@
+/* Hydranten Feuerwehr Kleve – © 2026 Simone Loosen, Feuerwehr Kleve. Alle Rechte vorbehalten. Siehe LICENSE. */
 /* ---------- Konstanten ---------- */
 const DB_NAME = "hydranten-db";
 const DB_VERSION = 3; // v2: settings-Store; v3: zusätzlicher "archive"-Store für die Jahresarchive
