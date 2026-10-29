@@ -3370,6 +3370,7 @@ function renderLoginScreen() {
       <p id="login-error" class="error-text"></p>
       <button id="btn-login" class="btn btn-primary btn-full" style="margin-top:6px;">Anmelden</button>
       <div class="login-hint">Zugangsdaten bekommst du vom App-Admin. Pro Einheit gibt es einen gemeinsamen Zugang.</div>
+      <div class="copyright-line">© 2026 Simone Loosen, Feuerwehr Kleve · Alle Rechte vorbehalten</div>
     </div>
   `;
   document.getElementById("btn-login").addEventListener("click", handleLogin);

@@ -268,4 +268,4 @@ In der Konten-Seite (App-Admin): „Neues Passwort erzeugen“ (16 Zeichen in 4 
 Auf der Statistik-Seite (App-Admin) und in der Statistik-Ansicht der Stadtwerke wählt man oben die **Einheit**. Es erscheinen nur Einheiten mit Hydranten (Bezirk „Sonder“ zählt nicht). Die Kontrollrunde (Startdatum) gilt für alle Einheiten gemeinsam. Die gespeicherte Abschluss-Meldung mit Datum gibt es weiter nur für LZ Kleve; bei anderen Einheiten erscheint die Meldung „komplett abgeschlossen“ ohne Datum, sobald alles fertig ist.
 
 ## Urheberrecht und Lizenz
-© 2026 Simone Loosen, Feuerwehr Kleve. Alle Rechte vorbehalten. Die App ist **keine** Open-Source-Software; Nutzung, Weitergabe und Änderung nur mit Genehmigung (siehe `LICENSE`). Eingebundene Bibliotheken und Kartendaten: siehe `THIRD-PARTY-NOTICES.md`.
+© 2026 Simone Loosen, Feuerwehr Kleve. Alle Rechte vorbehalten (steht auch dezent unten auf jeder Seite und auf dem Anmeldebildschirm). Die App ist **keine** Open-Source-Software; Nutzung, Weitergabe und Änderung nur mit Genehmigung (siehe `LICENSE`). Eingebundene Bibliotheken und Kartendaten: siehe `THIRD-PARTY-NOTICES.md`.
