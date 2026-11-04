@@ -25,7 +25,7 @@ const state = {
   remote: new Map(),    // key -> {lat, nw, helfer[]} von allen Helfern (Serverstand)
   sync: { laeuft: false, fehler: null, zuletzt: null },
   fEinheit: "", fBezirk: "",
-  mapView: null, luftbild: true,
+  mapView: null,
   filter: "offen",
   suche: "",
   view: "home",         // home | erfassen | neu
@@ -244,17 +244,13 @@ function renderErfassen() {
 
     <div class="card">
       <h3>Karte</h3>
-      <p class="note">Karte antippen oder den Pin ziehen, um die Position genau auf den Hydranten zu setzen. Der blaue Kreis zeigt, wo das GPS dich vermutet.</p>
+      <p class="note">Während der Messung springt der Pin automatisch auf die beste GPS-Position. Nach „Messung beenden“ kannst du die Karte antippen oder den Pin ziehen, um ihn genau auf den Hydranten zu setzen. Der blaue Kreis zeigt, wo das GPS dich vermutet.</p>
       <div id="karte"></div>
       <div class="row">
         <button class="btn ${messung ? "btn-danger" : "btn-primary"}" id="btn-geo">${messung ? "Messung beenden" : "📍 Messung starten"}</button>
         <button class="btn" id="btn-geo-take" ${g.best ? "" : "disabled"}>Position übernehmen</button>
       </div>
       <div class="geo-live" id="geo-live">${live}</div>
-      <div class="row">
-        <button class="btn btn-ghost" id="btn-layer">${state.luftbild ? "Straßenkarte" : "Luftbild"}</button>
-        <button class="btn btn-ghost" id="btn-zentrieren">Auf Pin zentrieren</button>
-      </div>
     </div>
 
     <div class="card">
@@ -305,8 +301,6 @@ function bindView() {
       if (la !== null && ln !== null && Math.abs(la) <= 90 && Math.abs(ln) <= 180) setzePin(la, ln, false);
     }));
     $("e-nw").oninput = pruefeNw;
-    $("btn-layer").onclick = () => { state.luftbild = !state.luftbild; tauscheLayer(); $("btn-layer").textContent = state.luftbild ? "Straßenkarte" : "Luftbild"; };
-    $("btn-zentrieren").onclick = () => { if (karte && pin) karte.setView(pin.getLatLng(), Math.max(karte.getZoom(), 19)); else showToast("Noch kein Pin gesetzt"); };
     baueKarte();
   }
 }
@@ -345,8 +339,10 @@ function starteMessung() {
     (pos) => {
       const p = { lat: pos.coords.latitude, lng: pos.coords.longitude, acc: pos.coords.accuracy };
       state.geo.last = p; state.geo.fehler = null;
-      if (!state.geo.best || p.acc < state.geo.best.acc) state.geo.best = p;
+      const besser = !state.geo.best || p.acc < state.geo.best.acc;
+      if (besser) state.geo.best = p;
       aktualisiereGeo();
+      if (besser) uebernehmen(true); // Pin folgt während der Messung automatisch dem besten Wert
     },
     (err) => {
       state.geo.fehler = err.code === 1 ? "Standortfreigabe verweigert. Im Browser erlauben oder Werte von Hand eintragen." : "Kein GPS-Signal. Bitte freien Himmel suchen und erneut versuchen.";
@@ -368,7 +364,7 @@ function aktualisiereGeo() {
   if (take) take.disabled = !g.best;
   zeigeGpsAufKarte();
 }
-function uebernehmen() {
+function uebernehmen(leise) {
   const b = state.geo.best;
   if (!b) return;
   state.cur.lat = +b.lat.toFixed(7); state.cur.lng = +b.lng.toFixed(7); state.cur.acc = b.acc; state.cur.zeit = new Date().toISOString();
@@ -377,22 +373,17 @@ function uebernehmen() {
   document.getElementById("e-pos-info").textContent = `Übernommen ${fmtZeit(state.cur.zeit)}, Genauigkeit ±${Math.round(b.acc)} m.`;
   setzePin(state.cur.lat, state.cur.lng, false);
   if (karte) karte.setView([state.cur.lat, state.cur.lng], Math.max(karte.getZoom(), 19));
-  showToast("Position übernommen");
+  if (!leise) showToast("Position übernommen");
 }
 
 /* ---------- Karte mit verschiebbarem Pin ---------- */
 const OSM_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
-const LUFT_URL = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}";
-let karte = null, pin = null, gpsPunkt = null, gpsKreis = null, layerStrasse = null, layerLuft = null;
+let karte = null, pin = null, gpsPunkt = null, gpsKreis = null;
 const PIN_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="30" height="40" viewBox="0 0 30 40"><path d="M15 39C15 39 2 24 2 14a13 13 0 0 1 26 0c0 10-13 25-13 25z" fill="#C22E2E" stroke="#fff" stroke-width="2.5"/><circle cx="15" cy="14" r="4.5" fill="#fff"/></svg>';
 
 function zerstoereKarte() {
   if (karte) { karte.remove(); karte = null; }
-  pin = null; gpsPunkt = null; gpsKreis = null; layerStrasse = null; layerLuft = null;
-}
-function tauscheLayer() {
-  if (!karte) return;
-  if (state.luftbild) { karte.removeLayer(layerStrasse); layerLuft.addTo(karte); } else { karte.removeLayer(layerLuft); layerStrasse.addTo(karte); }
+  pin = null; gpsPunkt = null; gpsKreis = null;
 }
 function baueKarte() {
   const el = document.getElementById("karte");
@@ -406,23 +397,33 @@ function baueKarte() {
       : c.vorhandenPos ? { c: [c.vorhandenLat, c.vorhandenLng], z: 18 }
         : g.best ? { c: [g.best.lat, g.best.lng], z: 19 } : { c: [51.7869, 6.1387], z: 14 });
   karte = L.map(el, { maxZoom: 20 }).setView(start.c, start.z);
-  layerStrasse = L.tileLayer(OSM_URL, { maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>' });
-  layerLuft = L.tileLayer(LUFT_URL, { maxZoom: 20, maxNativeZoom: 19, attribution: "Luftbild &copy; Esri" });
-  (state.luftbild ? layerLuft : layerStrasse).addTo(karte);
+  L.tileLayer(OSM_URL, { maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>' }).addTo(karte);
   if (c.vorhandenPos && !hatPosition) {
     L.circleMarker([c.vorhandenLat, c.vorhandenLng], { radius: 8, color: "#fff", weight: 2, fillColor: "#6b7280", fillOpacity: 0.9 }).addTo(karte).bindTooltip("Position in der Hauptapp", { permanent: false });
   }
   if (hatPosition) setzePin(c.lat, c.lng, false);
-  karte.on("click", (e) => setzePin(e.latlng.lat, e.latlng.lng, true));
+  karte.on("click", (e) => {
+    if (state.geo.watchId !== null) { zurueckZumGps("Während der Messung setzt sich der Pin automatisch. Erst „Messung beenden“, dann kannst du ihn verschieben."); return; }
+    setzePin(e.latlng.lat, e.latlng.lng, true);
+  });
   karte.on("moveend", () => { const m = karte.getCenter(); state.mapView = { c: [m.lat, m.lng], z: karte.getZoom() }; });
   zeigeGpsAufKarte();
   setTimeout(() => { if (karte) karte.invalidateSize(); }, 80);
+}
+function zurueckZumGps(hinweis) {
+  const c = state.cur;
+  if (Number.isFinite(c.lat) && Number.isFinite(c.lng)) { setzePin(c.lat, c.lng, false); if (karte) karte.setView([c.lat, c.lng], Math.max(karte.getZoom(), 19)); }
+  else if (pin && karte) { karte.removeLayer(pin); pin = null; }
+  showToast(hinweis);
 }
 function setzePin(lat, lng, manuell) {
   if (karte) {
     if (!pin) {
       pin = L.marker([lat, lng], { draggable: true, icon: L.divIcon({ html: PIN_SVG, className: "pin-icon", iconSize: [30, 40], iconAnchor: [15, 39] }) }).addTo(karte);
-      pin.on("dragend", () => { const p = pin.getLatLng(); setzePin(p.lat, p.lng, true); });
+      pin.on("dragend", () => {
+        if (state.geo.watchId !== null) { zurueckZumGps("Während der Messung bleibt der Pin an der GPS-Position. Erst „Messung beenden“, dann kannst du ihn verschieben."); return; }
+        const p = pin.getLatLng(); setzePin(p.lat, p.lng, true);
+      });
     } else pin.setLatLng([lat, lng]);
   }
   if (manuell) {
