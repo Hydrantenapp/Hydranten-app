@@ -243,6 +243,16 @@ function renderErfassen() {
     ${vorhanden}${nwVorhanden}
 
     <div class="card">
+      <h3>Karte</h3>
+      <p class="note">Karte antippen oder den Pin ziehen, um die Position genau auf den Hydranten zu setzen. Der blaue Kreis zeigt, wo das GPS dich vermutet.</p>
+      <div id="karte"></div>
+      <div class="row">
+        <button class="btn btn-ghost" id="btn-layer">${state.luftbild ? "Straßenkarte" : "Luftbild"}</button>
+        <button class="btn btn-ghost" id="btn-zentrieren">Auf Pin zentrieren</button>
+      </div>
+    </div>
+
+    <div class="card">
       <h3>Position</h3>
       <p class="note">Direkt am Hydranten stehen, Messung starten und warten, bis die Genauigkeit gut ist (am besten unter 10 m). Es wird immer der beste Wert gemerkt.</p>
       <button class="btn ${messung ? "btn-danger" : "btn-primary"}" id="btn-geo">${messung ? "Messung beenden" : "📍 Messung starten"}</button>
@@ -253,16 +263,6 @@ function renderErfassen() {
         <div style="flex:1"><label class="lbl">Längengrad</label><input type="text" id="e-lng" inputmode="decimal" value="${c.lng ?? ""}" placeholder="6.13…" /></div>
       </div>
       <p class="note" id="e-pos-info">${c.zeit && Number.isFinite(c.acc) ? `Übernommen ${fmtZeit(c.zeit)}, Genauigkeit ±${Math.round(c.acc)} m.` : (c.zeit ? `Per Pin gesetzt ${fmtZeit(c.zeit)}.` : "")}</p>
-    </div>
-
-    <div class="card">
-      <h3>Karte</h3>
-      <p class="note">Karte antippen oder den Pin ziehen, um die Position genau auf den Hydranten zu setzen. Der blaue Kreis zeigt, wo das GPS dich vermutet.</p>
-      <div id="karte"></div>
-      <div class="row">
-        <button class="btn btn-ghost" id="btn-layer">${state.luftbild ? "Straßenkarte" : "Luftbild"}</button>
-        <button class="btn btn-ghost" id="btn-zentrieren">Auf Pin zentrieren</button>
-      </div>
     </div>
 
     <div class="card">
