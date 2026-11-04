@@ -152,7 +152,6 @@ function render() {
   const el = document.getElementById("content");
   if (!angemeldet() && !state.meta.lokal) { el.innerHTML = renderLogin(); bindLogin(); return; }
   if (state.view === "erfassen") el.innerHTML = renderErfassen();
-  else if (state.view === "neu") el.innerHTML = renderNeu();
   else el.innerHTML = renderHome();
   bindView();
 }
@@ -195,10 +194,9 @@ function renderHome() {
       </div>
       <input type="search" id="suche" style="margin-top:8px" placeholder="Name, Nummer, Einheit suchen" value="${esc(state.suche)}" />
       <div style="margin-top:10px;">
-        ${zeigen.length === 0 ? `<p class="note">${state.liste.length === 0 ? "Noch keine Hydranten geladen. Du kannst trotzdem einen neuen Hydranten anlegen." : "Nichts in dieser Auswahl."}</p>` : zeigen.map(itemHTML).join("")}
+        ${zeigen.length === 0 ? `<p class="note">${state.liste.length === 0 ? "Noch keine Hydranten geladen. Bitte oben die Liste aus Excel laden." : "Nichts in dieser Auswahl."}</p>` : zeigen.map(itemHTML).join("")}
         ${sicht.length > MAX_ANZEIGE ? `<p class="note">${sicht.length - MAX_ANZEIGE} weitere – Suche eingrenzen.</p>` : ""}
       </div>
-      <button class="btn" id="btn-neu">+ Neuer Hydrant (nicht in der Liste)</button>
     </div>
 
     <div class="card">
@@ -226,27 +224,6 @@ function itemHTML(h) {
   </div>`;
 }
 
-function renderNeu() {
-  const c = state.cur || {};
-  return `
-    <button class="back" id="btn-zurueck">‹ Zurück</button>
-    <h2>Neuer Hydrant</h2>
-    <p class="sub">Für Hydranten, die noch nicht in der Hauptapp stehen. Sie werden dort nicht automatisch angelegt, sondern im Nachtrag-Import nur gemeldet.</p>
-    <div class="card">
-      <label class="lbl">Bezeichnung / Standortname *</label>
-      <input type="text" id="n-name" value="${esc(c.name || "")}" placeholder="z. B. Hauptstraße 12" />
-      <label class="lbl">Hydrantennummer (neu)</label>
-      <input type="text" id="n-nrneu" value="${esc(c.nrNeu || "")}" />
-      <label class="lbl">Hydrantennummer (alt)</label>
-      <input type="text" id="n-nralt" value="${esc(c.nrAlt || "")}" />
-      <label class="lbl">Einheit</label>
-      <select id="n-einheit"><option value="">–</option>${EINHEITEN.map((e) => `<option ${c.einheit === e ? "selected" : ""}>${esc(e)}</option>`).join("")}</select>
-      <label class="lbl">Bezirk</label>
-      <input type="text" id="n-bezirk" value="${esc(c.bezirk || "")}" />
-      <button class="btn btn-primary" id="btn-neu-weiter">Weiter zur Erfassung</button>
-    </div>`;
-}
-
 function renderErfassen() {
   const c = state.cur;
   const g = state.geo;
@@ -262,7 +239,7 @@ function renderErfassen() {
   return `
     <button class="back" id="btn-zurueck">‹ Zurück</button>
     <h2>${esc(c.name)}</h2>
-    <p class="sub">${nr}${alt}${ort ? " · " + ort : ""}${c.neu ? " · neu (nicht in der Liste)" : ""}</p>
+    <p class="sub">${nr}${alt}${ort ? " · " + ort : ""}</p>
     ${vorhanden}${nwVorhanden}
 
     <div class="card">
@@ -304,7 +281,6 @@ function bindView() {
   const $ = (id) => document.getElementById(id);
   if (state.view === "home") {
     $("btn-liste").onclick = () => $("liste-file").click();
-    $("btn-neu").onclick = () => { state.cur = {}; state.view = "neu"; render(); };
     $("btn-export").onclick = exportieren;
     const bs = $("btn-sync"); if (bs) bs.onclick = () => syncen(true);
     const ba = $("btn-abmelden"); if (ba) ba.onclick = abmelden;
@@ -314,9 +290,6 @@ function bindView() {
     $("suche").oninput = (e) => { state.suche = e.target.value; const pos = e.target.selectionStart; render(); const s = $("suche"); s.focus(); s.setSelectionRange(pos, pos); };
     document.querySelectorAll("[data-filter]").forEach((b) => (b.onclick = () => { state.filter = b.dataset.filter; render(); }));
     document.querySelectorAll(".item").forEach((it) => (it.onclick = () => oeffne(it.dataset.key)));
-  } else if (state.view === "neu") {
-    $("btn-zurueck").onclick = () => { state.view = "home"; render(); };
-    $("btn-neu-weiter").onclick = neuWeiter;
   } else if (state.view === "erfassen") {
     $("btn-zurueck").onclick = zurueck;
     $("btn-geo").onclick = () => (state.geo.watchId !== null ? stoppeMessung() : starteMessung());
@@ -348,19 +321,6 @@ function oeffne(key) {
     lat: n ? n.lat : null, lng: n ? n.lng : null, acc: n ? n.acc : null, zeit: n ? n.zeit : null,
     nennweite: n ? n.nennweite : "", gespeichert: !!n, gesendet: !!(n && n.gesendet),
   };
-  state.view = "erfassen"; render();
-}
-
-function neuWeiter() {
-  const v = (id) => document.getElementById(id).value.trim();
-  const c = { name: v("n-name"), nrNeu: v("n-nrneu"), nrAlt: v("n-nralt"), einheit: v("n-einheit"), bezirk: v("n-bezirk") };
-  if (!c.name) { showToast("Bitte eine Bezeichnung eingeben"); return; }
-  const key = schluessel(c);
-  if (state.liste.some((h) => h.key === key)) { showToast("Diesen Hydranten gibt es schon in der Liste"); oeffne(key); return; }
-  const n = state.nachtrag.get(key);
-  state.mapView = null;
-  state.geo = { watchId: null, best: null, last: null, fehler: null };
-  state.cur = { ...c, key, neu: true, vorhandenPos: false, lat: n ? n.lat : null, lng: n ? n.lng : null, acc: n ? n.acc : null, zeit: n ? n.zeit : null, nennweite: n ? n.nennweite : "", gespeichert: !!n };
   state.view = "erfassen"; render();
 }
 
