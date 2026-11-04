@@ -1,5 +1,5 @@
 /* Hydranten Feuerwehr Kleve – © 2026 Simone Loosen, Feuerwehr Kleve. Alle Rechte vorbehalten. Siehe LICENSE. */
-const CACHE_NAME = "hydranten-app-v21";
+const CACHE_NAME = "hydranten-app-v22";
 const PRECACHE_URLS = [
   "./",
   "./index.html",
@@ -34,7 +34,7 @@ self.addEventListener("install", (event) => {
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k)))
+      Promise.all(keys.filter((k) => k.startsWith("hydranten-app-") && k !== CACHE_NAME).map((k) => caches.delete(k)))
     )
   );
   self.clients.claim();
@@ -49,6 +49,8 @@ self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") return;
   // Server-Anfragen (Anmeldung, Daten, Fotos) niemals cachen
   if (new URL(event.request.url).hostname.endsWith(".supabase.co")) return;
+  // Die getrennte Erfassungs-App (Unterordner /erfassung/) hat einen eigenen Service Worker und Cache
+  if (new URL(event.request.url).pathname.includes("/erfassung/")) return;
 
   if (istAppShellDatei(event.request)) {
     // Netzwerk-zuerst für die App-Shell (index.html/app.js/styles.css/manifest.json): sorgt

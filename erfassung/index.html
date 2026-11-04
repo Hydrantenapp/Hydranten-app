@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<!-- Hydranten Erfassung – © 2026 Simone Loosen, Feuerwehr Kleve. Alle Rechte vorbehalten. Siehe LICENSE. -->
+<html lang="de">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#0F5C6E" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-title" content="Erfassung" />
+<title>Hydranten Erfassung</title>
+<link rel="manifest" href="manifest.json" />
+<link rel="icon" href="icons/icon-32.png" />
+<link rel="apple-touch-icon" href="icons/icon-180.png" />
+<link rel="stylesheet" href="styles.css" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+</head>
+<body>
+<header class="top">
+  <img src="icons/icon-192.png" alt="" class="top-logo" />
+  <div>
+    <div class="top-title">Hydranten Erfassung</div>
+    <div class="top-sub">Nur Position und Nennweite · getrennt von der Hauptapp</div>
+  </div>
+</header>
+<main id="content"></main>
+<input id="liste-file" type="file" accept=".xlsx,.xls" class="hidden" />
+<div id="toast" class="toast hidden"></div>
+<footer class="foot">© 2026 Simone Loosen, Feuerwehr Kleve · Alle Rechte vorbehalten</footer>
+<script src="app.js"></script>
+</body>
+</html>

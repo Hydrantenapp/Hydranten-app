@@ -269,3 +269,10 @@ Auf der Statistik-Seite (App-Admin) und in der Statistik-Ansicht der Stadtwerke 
 
 ## Urheberrecht und Lizenz
 © 2026 Simone Loosen, Feuerwehr Kleve. Alle Rechte vorbehalten (steht auch dezent in der unteren Leiste und auf dem Anmeldebildschirm). Die App ist **keine** Open-Source-Software; Nutzung, Weitergabe und Änderung nur mit Genehmigung (siehe `LICENSE`). Eingebundene Bibliotheken und Kartendaten: siehe `THIRD-PARTY-NOTICES.md`.
+
+## Erfassungs-App (Ordner `erfassung/`)
+Getrennte Minimal-App, erreichbar unter `<Adresse der App>/erfassung/`. Sie nimmt nur **Position (Breiten-/Längengrad)** und **Nennweite** auf. Sie hat keine Anmeldung und keine Verbindung zur Datenbank; die Daten liegen nur lokal auf dem Gerät (eigene IndexedDB `hydranten-erfassung`). Die Hauptapp-Daten können dadurch nicht verändert werden.
+
+Ablauf: Excel-Export aus der Hauptapp laden → Hydrant wählen, GPS-Messung starten, beste Position übernehmen, Nennweite eintragen → „Export als Excel“ (Blatt „Nachtrag“) → in der Hauptapp als App-Admin unter Daten → „Nachtrag importieren“ einlesen.
+
+Der Nachtrag-Import ergänzt nur leere Positionen/Nennweiten bestehender Hydranten, legt nichts an und löscht nichts. Abweichende Werte werden nur nach einer zweiten Rückfrage überschrieben. „Durchflussmenge“ entspricht dem Feld Nennweite (H-xxx).

@@ -1,0 +1,16 @@
+{
+  "name": "Hydranten Erfassung",
+  "short_name": "Erfassung",
+  "description": "Position und Nennweite von Hydranten erfassen (getrennt von der Hauptapp)",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0F5C6E",
+  "theme_color": "#0F5C6E",
+  "lang": "de",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}
