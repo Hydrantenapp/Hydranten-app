@@ -677,7 +677,7 @@ function renderNachSyncErlaubt() {
   if (document.getElementById("hydrant-form")) return false; // offenes Formular nicht zerstören
   const a = document.activeElement;
   if (a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)) return false;
-  if (state.tab === "konten" || state.tab === "daten-loeschen") return false;
+  if (state.tab === "konten" || state.tab === "daten-loeschen" || state.tab === "helfer") return false;
   return true;
 }
 
@@ -1763,7 +1763,11 @@ function renderDatenAppAdmin() {
       arbeitest du normal weiter, Änderungen werden später automatisch übertragen.
     </p>
 
-    <button type="button" id="btn-konten-oeffnen" class="info-link-row" style="border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,0.05);margin-top:14px;">
+    <button type="button" id="btn-helfer-oeffnen" class="info-link-row" style="border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,0.05);margin-top:14px;">
+      <span>📍 Erfassungen der Helfer</span><span class="info-link-chevron">›</span>
+    </button>
+
+    <button type="button" id="btn-konten-oeffnen" class="info-link-row" style="border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,0.05);margin-top:6px;">
       <span>👥 Konten &amp; Passwörter</span><span class="info-link-chevron">›</span>
     </button>
 
@@ -1873,6 +1877,94 @@ function renderKonten() {
     <button class="back-link" id="btn-konten-back">‹ Zurück</button>
     <h2 style="font-weight:600;margin:0 0 4px;">👥 Konten &amp; Passwörter</h2>
     ${inhalt}`;
+}
+
+/* ---------- Erfassungen der Helfer (nur App-Admin): wer hat wann welchen Hydranten erfasst ---------- */
+const HELFER_STATUS = { offen: "offen", uebernommen: "übernommen", verworfen: "verworfen" };
+async function ladeHelferUebersicht() {
+  try {
+    if (!sb || !navigator.onLine) throw new Error("Dafür ist eine Internetverbindung nötig");
+    const alle = [];
+    for (let von = 0; ; von += 1000) {
+      const { data, error } = await sb.from("nachtrag").select("*").order("erfasst_am", { ascending: false }).range(von, von + 999);
+      if (error) throw error;
+      alle.push(...data);
+      if (data.length < 1000) break;
+    }
+    state.helferDaten = alle; state.helferFehler = null;
+  } catch (e) { state.helferFehler = e.message || "Konnte nicht geladen werden"; }
+  if (state.tab === "helfer") render();
+}
+function helferGefiltert() {
+  return (state.helferDaten || []).filter((r) => (!state.helferFilterName || r.helfer === state.helferFilterName) && (!state.helferFilterStatus || r.status === state.helferFilterStatus));
+}
+function renderHelferUebersicht() {
+  let inhalt;
+  if (state.helferFehler) {
+    inhalt = `<p class="error-text">${esc(state.helferFehler)}</p><button class="btn btn-full" id="btn-helfer-neu-laden">Erneut laden</button>`;
+  } else if (!state.helferDaten) {
+    inhalt = `<p style="color:#6B7280;">Wird geladen …</p>`;
+  } else if (state.helferDaten.length === 0) {
+    inhalt = `<p style="color:#6B7280;">Noch keine Erfassungen von Helfern.</p>`;
+  } else {
+    const daten = state.helferDaten;
+    const namen = [...new Set(daten.map((r) => r.helfer))].sort((a, b) => a.localeCompare(b, "de"));
+    const proHelfer = namen.map((n) => ({ n, c: daten.filter((r) => r.helfer === n).length }));
+    const liste = helferGefiltert();
+    const zeigen = liste.slice(0, 300);
+    const fmt = (iso) => { const d = new Date(iso); return d.toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric" }) + " " + d.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" }); };
+    const farbe = { offen: "#B45309;background:#FFFBEB", uebernommen: "#166534;background:#ECFDF3", verworfen: "#6B7280;background:#F3F4F6" };
+    inhalt = `
+      <div style="display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 12px;">
+        ${proHelfer.map((x) => `<span style="font-size:12px;background:#fff;border-radius:999px;padding:4px 10px;box-shadow:0 1px 3px rgba(0,0,0,0.06);">${esc(x.n)}: <b>${x.c}</b></span>`).join("")}
+        <span style="font-size:12px;background:#fff;border-radius:999px;padding:4px 10px;box-shadow:0 1px 3px rgba(0,0,0,0.06);">Gesamt: <b>${daten.length}</b></span>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:10px;">
+        <select id="helfer-filter-name" style="flex:1"><option value="">Alle Helfer</option>${namen.map((n) => `<option ${state.helferFilterName === n ? "selected" : ""}>${esc(n)}</option>`).join("")}</select>
+        <select id="helfer-filter-status" style="flex:1"><option value="">Alle Status</option>${Object.entries(HELFER_STATUS).map(([k, v]) => `<option value="${k}" ${state.helferFilterStatus === k ? "selected" : ""}>${v}</option>`).join("")}</select>
+      </div>
+      ${zeigen.map((r) => `
+        <div style="background:#fff;border-radius:12px;padding:10px 12px;margin-bottom:8px;box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+          <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start;">
+            <div style="font-weight:600;min-width:0;overflow-wrap:anywhere;">${esc(r.name)}</div>
+            <span style="font-size:11px;border-radius:999px;padding:2px 8px;white-space:nowrap;color:${farbe[r.status] || farbe.offen};">${esc(HELFER_STATUS[r.status] || r.status)}</span>
+          </div>
+          <div style="font-size:12px;color:#6B7280;margin-top:2px;">${r.nr_neu ? "Nr. " + esc(r.nr_neu) : "keine neue Nr."}${r.nr_alt ? " (alt: " + esc(r.nr_alt) + ")" : ""}${r.einheit ? " · " + esc(r.einheit) : ""}${r.bezirk ? " · Bez. " + esc(r.bezirk) : ""}</div>
+          <div style="font-size:13px;margin-top:4px;"><b>${esc(r.helfer)}</b> · ${esc(fmt(r.erfasst_am))}</div>
+          <div style="font-size:12px;color:#374151;margin-top:2px;">${r.lat !== null ? `Position ${Number(r.lat).toFixed(6)}, ${Number(r.lng).toFixed(6)}${r.genauigkeit_m !== null ? ` (±${Math.round(r.genauigkeit_m)} m)` : " (per Pin)"}` : "keine Position"} · ${r.nennweite ? esc(r.nennweite) : "keine Nennweite"}</div>
+        </div>`).join("")}
+      ${liste.length > zeigen.length ? `<p style="font-size:12px;color:#6B7280;">${liste.length - zeigen.length} weitere nicht angezeigt. Filter eingrenzen oder als Excel exportieren.</p>` : ""}
+      ${liste.length === 0 ? `<p style="color:#6B7280;">Nichts in dieser Auswahl.</p>` : ""}
+      <button class="btn btn-outline btn-full" id="btn-helfer-export" style="margin-top:6px;">Auswahl als Excel exportieren (${liste.length})</button>`;
+  }
+  return `
+    <button class="back-link" id="btn-helfer-back">‹ Zurück</button>
+    <h2 style="font-weight:600;margin:0 0 4px;">📍 Erfassungen der Helfer</h2>
+    <p style="font-size:12px;color:#6B7280;margin:0 0 4px;">Wer hat wann welchen Hydranten erfasst, und was ist schon in die Hauptdaten übernommen.</p>
+    ${inhalt}`;
+}
+function setupHelferHandlers() {
+  const back = document.getElementById("btn-helfer-back");
+  if (back) back.addEventListener("click", navZurueck);
+  if (!state.helferDaten && !state.helferFehler) { ladeHelferUebersicht(); return; }
+  const neu = document.getElementById("btn-helfer-neu-laden");
+  if (neu) neu.addEventListener("click", () => { state.helferDaten = null; state.helferFehler = null; render(); });
+  const fn = document.getElementById("helfer-filter-name");
+  if (fn) fn.addEventListener("change", (e) => { state.helferFilterName = e.target.value; render(); });
+  const fs = document.getElementById("helfer-filter-status");
+  if (fs) fs.addEventListener("change", (e) => { state.helferFilterStatus = e.target.value; render(); });
+  const ex = document.getElementById("btn-helfer-export");
+  if (ex) ex.addEventListener("click", () => {
+    if (typeof XLSX === "undefined") { showToast("Excel-Bibliothek nicht verfügbar"); return; }
+    const rows = helferGefiltert().map((r) => ({
+      Name: r.name, HydrantennummerNeu: r.nr_neu, HydrantennummerAlt: r.nr_alt, Einheit: r.einheit, Bezirk: r.bezirk,
+      Helfer: r.helfer, Erfasst_am: r.erfasst_am, Nennweite: r.nennweite, Breitengrad: r.lat, Laengengrad: r.lng,
+      Genauigkeit_m: r.genauigkeit_m === null ? "" : Math.round(r.genauigkeit_m), Status: HELFER_STATUS[r.status] || r.status,
+    }));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), "Erfassungen");
+    XLSX.writeFile(wb, `erfassungen-der-helfer-${todayStr()}.xlsx`);
+  });
 }
 
 async function ladeKonten() {
@@ -2083,7 +2175,7 @@ function behandleZurueckNavigation() {
   if (state.tab === "info") { state.tab = "karte"; render(); return; }
   if (state.tab === "statistik-koordinaten") { state.tab = state.statistikKoordinatenHerkunft || "statistik"; render(); return; }
   if (state.tab === "statistik") { state.tab = "karte"; render(); return; }
-  if (state.tab === "daten-loeschen" || state.tab === "konten") { state.tab = "daten"; render(); return; }
+  if (state.tab === "daten-loeschen" || state.tab === "konten" || state.tab === "helfer") { state.tab = "daten"; render(); return; }
   if (state.tab === "detail") { state.tab = "karte"; state.selectedId = null; render(); return; }
   if (state.tab === "hinzufuegen" && state.hkAktiv) { state.hkAktiv = false; render(); return; }
   // Sonst: bereits auf einer "Wurzel"-Ansicht (Karte/Nähe/Daten/Hydrantenkontrolle-Einstieg) -
@@ -2106,6 +2198,7 @@ function render() {
   } else if (state.tab === "daten") content.innerHTML = renderDaten();
   else if (state.tab === "daten-loeschen") content.innerHTML = renderDatenLoeschen();
   else if (state.tab === "konten") content.innerHTML = renderKonten();
+  else if (state.tab === "helfer") content.innerHTML = renderHelferUebersicht();
   else if (state.tab === "info") content.innerHTML = renderInfo();
   else if (state.tab === "info-doc") content.innerHTML = renderInfoDoc(state.infoDocKind);
   else if (state.tab === "statistik") content.innerHTML = renderStatistik();
@@ -2361,6 +2454,14 @@ function attachHandlers() {
       await setSetting("lageFotoFreigegeben", state.lageFotoFreigegeben);
       showToast(state.lageFotoFreigegeben ? "Lage-Foto-Aufnahme freigegeben" : "Lage-Foto-Aufnahme gesperrt");
     });
+    const btnHelferUebersicht = document.getElementById("btn-helfer-oeffnen");
+    if (btnHelferUebersicht) btnHelferUebersicht.addEventListener("click", () => {
+      if (state.session !== "App-Admin") return;
+      navVor();
+      state.tab = "helfer";
+      state.helferDaten = null; state.helferFehler = null;
+      render();
+    });
     const btnKonten = document.getElementById("btn-konten-oeffnen");
     if (btnKonten) btnKonten.addEventListener("click", () => {
       if (state.session !== "App-Admin") return;
@@ -2394,6 +2495,7 @@ function attachHandlers() {
   }
 
   if (state.tab === "konten") setupKontenHandlers();
+  if (state.tab === "helfer") setupHelferHandlers();
 
   if (state.tab === "daten-loeschen") {
     const back = document.getElementById("btn-loeschen-back");
@@ -3617,7 +3719,7 @@ function showApp() {
   if (statistikBtn) statistikBtn.classList.toggle("hidden", !hatStatistikZugriff(state.session));
   if (!hatStatistikZugriff(state.session) && state.tab === "statistik") state.tab = "karte";
   if (!hatStatistikInhaltZugriff(state.session) && state.tab === "statistik-koordinaten") state.tab = "karte";
-  if (state.session !== "App-Admin" && (state.tab === "daten-loeschen" || state.tab === "konten")) state.tab = "karte";
+  if (state.session !== "App-Admin" && (state.tab === "daten-loeschen" || state.tab === "konten" || state.tab === "helfer")) state.tab = "karte";
 
   if (state.session === "Einsatzleitung" && !state.einsatzleitungLivePin && navigator.geolocation) {
     navigator.geolocation.getCurrentPosition(
