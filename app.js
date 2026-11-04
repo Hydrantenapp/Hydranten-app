@@ -1688,6 +1688,8 @@ function renderDatenAppAdmin() {
         </div>
       </div>
       <button id="btn-helfer-nachtrag" class="btn btn-outline btn-full">Offene Nachträge abholen</button>
+      <button id="btn-erfassung-link" class="btn btn-outline btn-full" style="margin-top:8px;">Link zur Erfassungs-App teilen</button>
+      <div style="font-size:11px;color:#9CA3AF;margin-top:6px;line-height:1.4;">Das Helfer-Passwort wird nicht mitgesendet. Gib es den Helfern separat weiter.</div>
     </div>
   `;
 
@@ -2320,6 +2322,8 @@ function attachHandlers() {
     if (btnNachtrag) btnNachtrag.addEventListener("click", () => document.getElementById("nachtrag-file").click());
     const btnHelfer = document.getElementById("btn-helfer-nachtrag");
     if (btnHelfer) btnHelfer.addEventListener("click", holeHelferNachtrag);
+    const btnLink = document.getElementById("btn-erfassung-link");
+    if (btnLink) btnLink.addEventListener("click", teileErfassungsLink);
     const btnTiles = document.getElementById("btn-download-tiles");
     if (btnTiles) btnTiles.addEventListener("click", downloadTiles);
     const btnArchivJetzt = document.getElementById("btn-archiv-jetzt");
@@ -3126,6 +3130,17 @@ function handleNachtragFile(e) {
     }
   };
   reader.readAsBinaryString(file);
+}
+
+/* Link zur Erfassungs-App (liegt im Unterordner dieser Seite) per Teilen-Menü oder Zwischenablage weitergeben */
+async function teileErfassungsLink() {
+  const link = location.origin + "/erfassung/";
+  const text = `Hydranten Erfassung der Feuerwehr Kleve: Position und Nennweite erfassen.\n${link}\nDas Passwort bekommst du separat.`;
+  if (navigator.share) {
+    try { await navigator.share({ title: "Hydranten Erfassung", text }); return; } catch (e) { if (e && e.name === "AbortError") return; }
+  }
+  const ok = await textKopieren(text);
+  showToast(ok ? "Link kopiert, jetzt in Mail oder Messenger einfügen" : "Kopieren nicht möglich: " + link);
 }
 
 /* Offene Nachträge der Helfer vom Server holen und übernehmen */
