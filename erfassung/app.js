@@ -247,6 +247,11 @@ function renderErfassen() {
       <p class="note">Karte antippen oder den Pin ziehen, um die Position genau auf den Hydranten zu setzen. Der blaue Kreis zeigt, wo das GPS dich vermutet.</p>
       <div id="karte"></div>
       <div class="row">
+        <button class="btn ${messung ? "btn-danger" : "btn-primary"}" id="btn-geo">${messung ? "Messung beenden" : "📍 Messung starten"}</button>
+        <button class="btn" id="btn-geo-take" ${g.best ? "" : "disabled"}>Position übernehmen</button>
+      </div>
+      <div class="geo-live" id="geo-live">${live}</div>
+      <div class="row">
         <button class="btn btn-ghost" id="btn-layer">${state.luftbild ? "Straßenkarte" : "Luftbild"}</button>
         <button class="btn btn-ghost" id="btn-zentrieren">Auf Pin zentrieren</button>
       </div>
@@ -254,10 +259,7 @@ function renderErfassen() {
 
     <div class="card">
       <h3>Position</h3>
-      <p class="note">Direkt am Hydranten stehen, Messung starten und warten, bis die Genauigkeit gut ist (am besten unter 10 m). Es wird immer der beste Wert gemerkt.</p>
-      <button class="btn ${messung ? "btn-danger" : "btn-primary"}" id="btn-geo">${messung ? "Messung beenden" : "📍 Messung starten"}</button>
-      <div class="geo-live" id="geo-live">${live}</div>
-      <button class="btn" id="btn-geo-take" ${g.best ? "" : "disabled"}>Beste Position übernehmen</button>
+      <p class="note">Am Hydranten stehen, oben die Messung starten und warten, bis die Genauigkeit gut ist (am besten unter 10 m). „Position übernehmen“ nimmt den besten gemessenen Wert, den Pin kannst du danach noch verschieben.</p>
       <div class="row">
         <div style="flex:1"><label class="lbl">Breitengrad</label><input type="text" id="e-lat" inputmode="decimal" value="${c.lat ?? ""}" placeholder="51.78…" /></div>
         <div style="flex:1"><label class="lbl">Längengrad</label><input type="text" id="e-lng" inputmode="decimal" value="${c.lng ?? ""}" placeholder="6.13…" /></div>
