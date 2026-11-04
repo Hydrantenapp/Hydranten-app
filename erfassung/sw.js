@@ -1,10 +1,12 @@
 /* Hydranten Erfassung – © 2026 Simone Loosen, Feuerwehr Kleve. Alle Rechte vorbehalten. Siehe LICENSE. */
 // Eigener Service Worker nur für den Ordner /erfassung/ - berührt die Hauptapp nicht.
-const CACHE_NAME = "hydranten-erfassung-v2";
+const CACHE_NAME = "hydranten-erfassung-v3";
 const PRECACHE_URLS = [
   "./", "./index.html", "./styles.css", "./app.js", "./manifest.json",
   "./icons/icon-32.png", "./icons/icon-180.png", "./icons/icon-192.png", "./icons/icon-512.png",
   "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js",
+  "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css",
+  "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js",
   "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js",
 ];
 

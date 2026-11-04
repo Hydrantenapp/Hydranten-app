@@ -25,6 +25,7 @@ const state = {
   remote: new Map(),    // key -> {lat, nw, helfer[]} von allen Helfern (Serverstand)
   sync: { laeuft: false, fehler: null, zuletzt: null },
   fEinheit: "", fBezirk: "",
+  mapView: null, luftbild: true,
   filter: "offen",
   suche: "",
   view: "home",         // home | erfassen | neu
@@ -274,7 +275,17 @@ function renderErfassen() {
         <div style="flex:1"><label class="lbl">Breitengrad</label><input type="text" id="e-lat" inputmode="decimal" value="${c.lat ?? ""}" placeholder="51.78…" /></div>
         <div style="flex:1"><label class="lbl">Längengrad</label><input type="text" id="e-lng" inputmode="decimal" value="${c.lng ?? ""}" placeholder="6.13…" /></div>
       </div>
-      <p class="note" id="e-pos-info">${c.zeit && Number.isFinite(c.acc) ? `Übernommen ${fmtZeit(c.zeit)}, Genauigkeit ±${Math.round(c.acc)} m.` : ""}</p>
+      <p class="note" id="e-pos-info">${c.zeit && Number.isFinite(c.acc) ? `Übernommen ${fmtZeit(c.zeit)}, Genauigkeit ±${Math.round(c.acc)} m.` : (c.zeit ? `Per Pin gesetzt ${fmtZeit(c.zeit)}.` : "")}</p>
+    </div>
+
+    <div class="card">
+      <h3>Karte</h3>
+      <p class="note">Karte antippen oder den Pin ziehen, um die Position genau auf den Hydranten zu setzen. Der blaue Kreis zeigt, wo das GPS dich vermutet.</p>
+      <div id="karte"></div>
+      <div class="row">
+        <button class="btn btn-ghost" id="btn-layer">${state.luftbild ? "Straßenkarte" : "Luftbild"}</button>
+        <button class="btn btn-ghost" id="btn-zentrieren">Auf Pin zentrieren</button>
+      </div>
     </div>
 
     <div class="card">
@@ -312,16 +323,24 @@ function bindView() {
     $("btn-geo-take").onclick = uebernehmen;
     $("btn-speichern").onclick = speichern;
     const v = $("btn-verwerfen"); if (v) v.onclick = verwerfen;
-    ["e-lat", "e-lng"].forEach((id) => ($(id).oninput = () => { state.cur.zeit = null; state.cur.acc = null; $("e-pos-info").textContent = ""; }));
+    ["e-lat", "e-lng"].forEach((id) => ($(id).oninput = () => {
+      state.cur.zeit = null; state.cur.acc = null; $("e-pos-info").textContent = "";
+      const la = parseZahl($("e-lat").value), ln = parseZahl($("e-lng").value);
+      if (la !== null && ln !== null && Math.abs(la) <= 90 && Math.abs(ln) <= 180) setzePin(la, ln, false);
+    }));
+    $("btn-layer").onclick = () => { state.luftbild = !state.luftbild; tauscheLayer(); $("btn-layer").textContent = state.luftbild ? "Straßenkarte" : "Luftbild"; };
+    $("btn-zentrieren").onclick = () => { if (karte && pin) karte.setView(pin.getLatLng(), Math.max(karte.getZoom(), 19)); else showToast("Noch kein Pin gesetzt"); };
+    baueKarte();
   }
 }
 
-function zurueck() { stoppeMessung(); state.view = "home"; state.cur = null; render(); }
+function zurueck() { stoppeMessung(); zerstoereKarte(); state.mapView = null; state.view = "home"; state.cur = null; render(); }
 
 function oeffne(key) {
   const h = state.liste.find((x) => x.key === key);
   if (!h) return;
   const n = state.nachtrag.get(key);
+  state.mapView = null;
   state.geo = { watchId: null, best: null, last: null, fehler: null };
   state.cur = {
     key, name: h.name, nrNeu: h.nrNeu, nrAlt: h.nrAlt, einheit: h.einheit, bezirk: h.bezirk, neu: false,
@@ -339,6 +358,7 @@ function neuWeiter() {
   const key = schluessel(c);
   if (state.liste.some((h) => h.key === key)) { showToast("Diesen Hydranten gibt es schon in der Liste"); oeffne(key); return; }
   const n = state.nachtrag.get(key);
+  state.mapView = null;
   state.geo = { watchId: null, best: null, last: null, fehler: null };
   state.cur = { ...c, key, neu: true, vorhandenPos: false, lat: n ? n.lat : null, lng: n ? n.lng : null, acc: n ? n.acc : null, zeit: n ? n.zeit : null, nennweite: n ? n.nennweite : "", gespeichert: !!n };
   state.view = "erfassen"; render();
@@ -373,6 +393,7 @@ function aktualisiereGeo() {
   el.textContent = g.last ? `Aktuell ±${Math.round(g.last.acc)} m · Beste ±${Math.round(g.best.acc)} m` : (g.fehler || "Warte auf GPS-Signal…");
   const take = document.getElementById("btn-geo-take");
   if (take) take.disabled = !g.best;
+  zeigeGpsAufKarte();
 }
 function uebernehmen() {
   const b = state.geo.best;
@@ -381,7 +402,72 @@ function uebernehmen() {
   document.getElementById("e-lat").value = state.cur.lat;
   document.getElementById("e-lng").value = state.cur.lng;
   document.getElementById("e-pos-info").textContent = `Übernommen ${fmtZeit(state.cur.zeit)}, Genauigkeit ±${Math.round(b.acc)} m.`;
+  setzePin(state.cur.lat, state.cur.lng, false);
+  if (karte) karte.setView([state.cur.lat, state.cur.lng], Math.max(karte.getZoom(), 19));
   showToast("Position übernommen");
+}
+
+/* ---------- Karte mit verschiebbarem Pin ---------- */
+const OSM_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
+const LUFT_URL = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}";
+let karte = null, pin = null, gpsPunkt = null, gpsKreis = null, layerStrasse = null, layerLuft = null;
+const PIN_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="30" height="40" viewBox="0 0 30 40"><path d="M15 39C15 39 2 24 2 14a13 13 0 0 1 26 0c0 10-13 25-13 25z" fill="#C22E2E" stroke="#fff" stroke-width="2.5"/><circle cx="15" cy="14" r="4.5" fill="#fff"/></svg>';
+
+function zerstoereKarte() {
+  if (karte) { karte.remove(); karte = null; }
+  pin = null; gpsPunkt = null; gpsKreis = null; layerStrasse = null; layerLuft = null;
+}
+function tauscheLayer() {
+  if (!karte) return;
+  if (state.luftbild) { karte.removeLayer(layerStrasse); layerLuft.addTo(karte); } else { karte.removeLayer(layerLuft); layerStrasse.addTo(karte); }
+}
+function baueKarte() {
+  const el = document.getElementById("karte");
+  if (!el) return;
+  if (typeof L === "undefined") { el.innerHTML = '<p class="note">Karte nicht verfügbar (Internet nötig). Die Koordinaten können auch von Hand eingetragen werden.</p>'; return; }
+  zerstoereKarte();
+  const c = state.cur, g = state.geo;
+  const hatPosition = Number.isFinite(c.lat) && Number.isFinite(c.lng);
+  const start = state.mapView
+    || (hatPosition ? { c: [c.lat, c.lng], z: 19 }
+      : c.vorhandenPos ? { c: [c.vorhandenLat, c.vorhandenLng], z: 18 }
+        : g.best ? { c: [g.best.lat, g.best.lng], z: 19 } : { c: [51.7869, 6.1387], z: 14 });
+  karte = L.map(el, { maxZoom: 20 }).setView(start.c, start.z);
+  layerStrasse = L.tileLayer(OSM_URL, { maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>' });
+  layerLuft = L.tileLayer(LUFT_URL, { maxZoom: 20, maxNativeZoom: 19, attribution: "Luftbild &copy; Esri" });
+  (state.luftbild ? layerLuft : layerStrasse).addTo(karte);
+  if (c.vorhandenPos && !hatPosition) {
+    L.circleMarker([c.vorhandenLat, c.vorhandenLng], { radius: 8, color: "#fff", weight: 2, fillColor: "#6b7280", fillOpacity: 0.9 }).addTo(karte).bindTooltip("Position in der Hauptapp", { permanent: false });
+  }
+  if (hatPosition) setzePin(c.lat, c.lng, false);
+  karte.on("click", (e) => setzePin(e.latlng.lat, e.latlng.lng, true));
+  karte.on("moveend", () => { const m = karte.getCenter(); state.mapView = { c: [m.lat, m.lng], z: karte.getZoom() }; });
+  zeigeGpsAufKarte();
+  setTimeout(() => { if (karte) karte.invalidateSize(); }, 80);
+}
+function setzePin(lat, lng, manuell) {
+  if (karte) {
+    if (!pin) {
+      pin = L.marker([lat, lng], { draggable: true, icon: L.divIcon({ html: PIN_SVG, className: "pin-icon", iconSize: [30, 40], iconAnchor: [15, 39] }) }).addTo(karte);
+      pin.on("dragend", () => { const p = pin.getLatLng(); setzePin(p.lat, p.lng, true); });
+    } else pin.setLatLng([lat, lng]);
+  }
+  if (manuell) {
+    const c = state.cur;
+    c.lat = +lat.toFixed(7); c.lng = +lng.toFixed(7); c.acc = null; c.zeit = new Date().toISOString();
+    document.getElementById("e-lat").value = c.lat; document.getElementById("e-lng").value = c.lng;
+    document.getElementById("e-pos-info").textContent = `Per Pin gesetzt ${fmtZeit(c.zeit)}.`;
+  }
+}
+function zeigeGpsAufKarte() {
+  const g = state.geo;
+  if (!karte || !g.last) return;
+  const ll = [g.last.lat, g.last.lng];
+  if (!gpsPunkt) {
+    gpsKreis = L.circle(ll, { radius: g.last.acc, color: "#1E6FD9", weight: 1, fillColor: "#1E6FD9", fillOpacity: 0.12 }).addTo(karte);
+    gpsPunkt = L.circleMarker(ll, { radius: 7, color: "#fff", weight: 2, fillColor: "#1E6FD9", fillOpacity: 1 }).addTo(karte);
+    if (!pin && !state.mapView) karte.setView(ll, 19);
+  } else { gpsKreis.setLatLng(ll).setRadius(g.last.acc); gpsPunkt.setLatLng(ll); }
 }
 
 /* ---------- Speichern / Verwerfen ---------- */
@@ -400,7 +486,7 @@ async function speichern() {
   };
   await idbPut("nachtrag", eintrag);
   state.nachtrag.set(c.key, eintrag);
-  stoppeMessung();
+  stoppeMessung(); zerstoereKarte(); state.mapView = null;
   state.view = "home"; state.cur = null; render();
   showToast("Gespeichert");
   syncen(false);
