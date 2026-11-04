@@ -269,10 +269,11 @@ function renderErfassen() {
 
     <div class="card">
       <h3>Nennweite</h3>
-      <div class="nw"><span>H-</span><input type="text" id="e-nw" inputmode="numeric" value="${esc(String(c.nennweite || "").replace(/^H-?/i, ""))}" placeholder="100" /></div>
+      <div class="nw ${nwPflicht(c) && !c.nennweite ? "nw-leer" : ""}" id="nw-box"><span>H-</span><input type="text" id="e-nw" inputmode="numeric" value="${esc(String(c.nennweite || "").replace(/^H-?/i, ""))}" placeholder="Zahl eintragen" /></div>
+      <p class="nw-hinweis" id="nw-hinweis" ${nwPflicht(c) && !c.nennweite ? "" : "hidden"}>Pflichtfeld: Nennweite eintragen, dann kann gespeichert werden.</p>
     </div>
 
-    <button class="btn btn-primary" id="btn-speichern">Speichern</button>
+    <button class="btn btn-primary" id="btn-speichern" ${nwPflicht(c) && !c.nennweite ? "disabled" : ""}>Speichern</button>
     ${c.gespeichert && !c.gesendet ? `<button class="btn btn-danger" id="btn-verwerfen">Erfassung verwerfen</button>` : ""}
     ${c.gesendet ? `<p class="note">Bereits an den Server gesendet. Zum Korrigieren einfach neue Werte eintragen und erneut speichern.</p>` : ""}
   `;
@@ -303,12 +304,22 @@ function bindView() {
       const la = parseZahl($("e-lat").value), ln = parseZahl($("e-lng").value);
       if (la !== null && ln !== null && Math.abs(la) <= 90 && Math.abs(ln) <= 180) setzePin(la, ln, false);
     }));
+    $("e-nw").oninput = pruefeNw;
     $("btn-layer").onclick = () => { state.luftbild = !state.luftbild; tauscheLayer(); $("btn-layer").textContent = state.luftbild ? "Straßenkarte" : "Luftbild"; };
     $("btn-zentrieren").onclick = () => { if (karte && pin) karte.setView(pin.getLatLng(), Math.max(karte.getZoom(), 19)); else showToast("Noch kein Pin gesetzt"); };
     baueKarte();
   }
 }
 
+/* Nennweite ist Pflicht, außer sie steht in der Hauptapp schon */
+const nwPflicht = (c) => !c.vorhandenNw;
+function pruefeNw() {
+  const c = state.cur, v = nennweiteNorm(document.getElementById("e-nw").value);
+  const leer = nwPflicht(c) && !v;
+  document.getElementById("nw-box").classList.toggle("nw-leer", leer);
+  document.getElementById("nw-hinweis").hidden = !leer;
+  document.getElementById("btn-speichern").disabled = leer;
+}
 function zurueck() { stoppeMessung(); zerstoereKarte(); state.mapView = null; state.view = "home"; state.cur = null; render(); }
 
 function oeffne(key) {
@@ -440,6 +451,7 @@ async function speichern() {
   const nw = nennweiteNorm(document.getElementById("e-nw").value);
   if ((latRaw.trim() !== "" || lngRaw.trim() !== "") && (lat === null || lng === null)) { showToast("Breiten- und Längengrad müssen beide gültige Zahlen sein"); return; }
   if (lat !== null && (lat < -90 || lat > 90 || lng < -180 || lng > 180)) { showToast("Koordinaten außerhalb des gültigen Bereichs"); return; }
+  if (nwPflicht(c) && !nw) { showToast("Bitte die Nennweite eintragen"); return; }
   if (lat === null && !nw) { showToast("Bitte Position oder Nennweite erfassen"); return; }
   const eintrag = {
     key: c.key, name: c.name, nrNeu: c.nrNeu || "", nrAlt: c.nrAlt || "", einheit: c.einheit || "", bezirk: c.bezirk || "",
