@@ -5,7 +5,10 @@
  * (eigene IndexedDB "hydranten-erfassung"). Die Daten wandern nur per Excel-Datei in die Hauptapp.
  */
 const DB_NAME = "hydranten-erfassung";
-const DB_VER = 1;
+const DB_VER = 2;
+const SUPABASE_URL = "https://icepfjtifsdbefrgilan.supabase.co";
+const SUPABASE_KEY = "sb_publishable_oFDN741MtN1_XwVBj4ku8g_j7gqs29P"; // öffentlicher Schlüssel
+const HELFER_EMAIL = "erfassung@lz-kleve.de"; // gemeinsamer Helfer-Zugang (darf nur Nachträge schreiben)
 const EINHEITEN = [
   "LZ Kleve", "LZ Materborn", "LZ Kellen", "LZ Rindern",
   "LG Reichswalde", "LG Donsbrüggen", "LG Wardhausen-Brienen", "LG Griethausen",
@@ -18,6 +21,10 @@ const state = {
   liste: [],            // aus der Hauptapp geladene Hydranten (nur Stammdaten, schreibgeschützt)
   nachtrag: new Map(),  // key -> erfasste Werte
   meta: {},
+  sb: null,
+  remote: new Map(),    // key -> {lat, nw, helfer[]} von allen Helfern (Serverstand)
+  sync: { laeuft: false, fehler: null, zuletzt: null },
+  fEinheit: "", fBezirk: "",
   filter: "offen",
   suche: "",
   view: "home",         // home | erfassen | neu
@@ -61,6 +68,7 @@ function openDB() {
       if (!d.objectStoreNames.contains("liste")) d.createObjectStore("liste", { keyPath: "key" });
       if (!d.objectStoreNames.contains("nachtrag")) d.createObjectStore("nachtrag", { keyPath: "key" });
       if (!d.objectStoreNames.contains("meta")) d.createObjectStore("meta", { keyPath: "k" });
+      if (!d.objectStoreNames.contains("remote")) d.createObjectStore("remote", { keyPath: "id" });
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
@@ -90,21 +98,37 @@ async function laden() {
   state.liste = await idbAll("liste");
   state.nachtrag = new Map((await idbAll("nachtrag")).map((n) => [n.key, n]));
   state.meta = Object.fromEntries((await idbAll("meta")).map((m) => [m.k, m.v]));
+  baueRemote(await idbAll("remote"));
+}
+function baueRemote(rows) {
+  const m = new Map();
+  for (const r of rows) {
+    if (r.status === "verworfen") continue;
+    const e = m.get(r.key) || { lat: false, nw: false, helfer: [] };
+    if (Number.isFinite(r.lat)) e.lat = true;
+    if (r.nennweite) e.nw = true;
+    if (r.helfer && !e.helfer.includes(r.helfer)) e.helfer.push(r.helfer);
+    m.set(r.key, e);
+  }
+  state.remote = m;
 }
 
 /* ---------- Auswertung ---------- */
 function offenInfo(h) {
   const n = state.nachtrag.get(h.key);
-  const posOk = hatPos(h) || (n && Number.isFinite(n.lat));
-  const nwOk = !!h.nennweite || (n && !!n.nennweite);
-  return { n, posOk, nwOk, offen: !posOk || !nwOk };
+  const r = state.remote.get(h.key);
+  const posOk = hatPos(h) || (n && Number.isFinite(n.lat)) || !!(r && r.lat);
+  const nwOk = !!h.nennweite || (n && !!n.nennweite) || !!(r && r.nw);
+  return { n, r, posOk, nwOk, offen: !posOk || !nwOk };
 }
 function sichtbareListe() {
   const q = state.suche.trim().toLowerCase();
   return state.liste.filter((h) => {
     const info = offenInfo(h);
     if (state.filter === "offen" && !info.offen) return false;
-    if (state.filter === "erfasst" && !info.n) return false;
+    if (state.filter === "erfasst" && !info.n && !info.r) return false;
+    if (state.fEinheit && h.einheit !== state.fEinheit) return false;
+    if (state.fBezirk && h.bezirk !== state.fBezirk) return false;
     if (!q) return true;
     return [h.name, h.nrNeu, h.nrAlt, h.einheit, h.bezirk].some((x) => String(x || "").toLowerCase().includes(q));
   }).sort((a, b) => String(a.name).localeCompare(String(b.name), "de"));
@@ -114,10 +138,18 @@ function nichtExportiert() {
   state.nachtrag.forEach((e) => { if (!e.exportiert || e.geaendert > e.exportiert) n++; });
   return n;
 }
+function ungesendet() {
+  let n = 0;
+  state.nachtrag.forEach((e) => { if (!e.gesendet || e.geaendert > e.gesendet) n++; });
+  return n;
+}
+const angemeldet = () => !!state.meta.angemeldet;
+function werte(feld) { return [...new Set(state.liste.map((h) => h[feld]).filter(Boolean))].sort((a, b) => String(a).localeCompare(String(b), "de", { numeric: true })); }
 
 /* ---------- Ansichten ---------- */
 function render() {
   const el = document.getElementById("content");
+  if (!angemeldet() && !state.meta.lokal) { el.innerHTML = renderLogin(); bindLogin(); return; }
   if (state.view === "erfassen") el.innerHTML = renderErfassen();
   else if (state.view === "neu") el.innerHTML = renderNeu();
   else el.innerHTML = renderHome();
@@ -133,9 +165,15 @@ function renderHome() {
     <div class="stats">
       <div class="stat"><b>${state.liste.length}</b><span>in der Liste</span></div>
       <div class="stat"><b>${offen}</b><span>offen</span></div>
-      <div class="stat"><b>${state.nachtrag.size}</b><span>erfasst</span></div>
-      <div class="stat"><b>${nichtExportiert()}</b><span>nicht exportiert</span></div>
+      <div class="stat"><b>${state.nachtrag.size}</b><span>von mir erfasst</span></div>
+      <div class="stat"><b>${angemeldet() ? ungesendet() : nichtExportiert()}</b><span>${angemeldet() ? "nicht gesendet" : "nicht exportiert"}</span></div>
     </div>
+
+    ${angemeldet() ? `<div class="card">
+      <h3>Helfer: ${esc(state.meta.helfer || "")}</h3>
+      <p class="note" id="sync-info">${syncText()}</p>
+      <div class="row"><button class="btn" id="btn-sync">Jetzt abgleichen</button><button class="btn btn-ghost" id="btn-abmelden">Abmelden</button></div>
+    </div>` : `<div class="warn">Nur lokaler Betrieb: Es wird nichts an den Server gesendet. Bitte regelmäßig als Excel exportieren. <button class="btn" id="btn-zum-login">Anmelden</button></div>`}
 
     <div class="card">
       <h3>1. Hydrantenliste laden</h3>
@@ -150,7 +188,11 @@ function renderHome() {
         <button class="chip" data-filter="erfasst" data-active="${state.filter === "erfasst"}">Erfasst</button>
         <button class="chip" data-filter="alle" data-active="${state.filter === "alle"}">Alle</button>
       </div>
-      <input type="search" id="suche" placeholder="Name, Nummer, Einheit suchen" value="${esc(state.suche)}" />
+      <div class="row">
+        <select id="f-einheit"><option value="">Alle Einheiten</option>${werte("einheit").map((v) => `<option ${state.fEinheit === v ? "selected" : ""}>${esc(v)}</option>`).join("")}</select>
+        <select id="f-bezirk"><option value="">Alle Bezirke</option>${werte("bezirk").map((v) => `<option ${state.fBezirk === v ? "selected" : ""}>${esc(v)}</option>`).join("")}</select>
+      </div>
+      <input type="search" id="suche" style="margin-top:8px" placeholder="Name, Nummer, Einheit suchen" value="${esc(state.suche)}" />
       <div style="margin-top:10px;">
         ${zeigen.length === 0 ? `<p class="note">${state.liste.length === 0 ? "Noch keine Hydranten geladen. Du kannst trotzdem einen neuen Hydranten anlegen." : "Nichts in dieser Auswahl."}</p>` : zeigen.map(itemHTML).join("")}
         ${sicht.length > MAX_ANZEIGE ? `<p class="note">${sicht.length - MAX_ANZEIGE} weitere – Suche eingrenzen.</p>` : ""}
@@ -169,12 +211,13 @@ function renderHome() {
 }
 
 function itemHTML(h) {
-  const { n, posOk, nwOk } = offenInfo(h);
+  const { n, r, posOk, nwOk } = offenInfo(h);
   const nr = h.nrNeu ? `Nr. ${esc(h.nrNeu)}` : "keine neue Nr.";
   const alt = h.nrAlt ? ` (alt: ${esc(h.nrAlt)})` : "";
   const ort = [h.einheit, h.bezirk ? "Bez. " + h.bezirk : ""].filter(Boolean).map(esc).join(" · ");
-  const posTag = hatPos(h) ? `<span class="tag ok">Position vorhanden</span>` : (n && Number.isFinite(n.lat) ? `<span class="tag done">Position erfasst</span>` : `<span class="tag miss">Position fehlt</span>`);
-  const nwTag = h.nennweite ? `<span class="tag ok">${esc(h.nennweite)}</span>` : (n && n.nennweite ? `<span class="tag done">${esc(n.nennweite)} erfasst</span>` : `<span class="tag miss">Nennweite fehlt</span>`);
+  const fremd = r && r.helfer.length ? ` (${esc(r.helfer.join(", "))})` : "";
+  const posTag = hatPos(h) ? `<span class="tag ok">Position vorhanden</span>` : (n && Number.isFinite(n.lat) ? `<span class="tag done">Position erfasst</span>` : (r && r.lat ? `<span class="tag done">Position erfasst${fremd}</span>` : `<span class="tag miss">Position fehlt</span>`));
+  const nwTag = h.nennweite ? `<span class="tag ok">${esc(h.nennweite)}</span>` : (n && n.nennweite ? `<span class="tag done">${esc(n.nennweite)} erfasst</span>` : (r && r.nw ? `<span class="tag done">Nennweite erfasst${fremd}</span>` : `<span class="tag miss">Nennweite fehlt</span>`));
   return `<div class="item" data-key="${esc(h.key)}">
     <div class="item-name">${esc(h.name)}</div>
     <div class="item-sub">${nr}${alt}${ort ? " · " + ort : ""}</div>
@@ -240,7 +283,8 @@ function renderErfassen() {
     </div>
 
     <button class="btn btn-primary" id="btn-speichern">Speichern</button>
-    ${c.gespeichert ? `<button class="btn btn-danger" id="btn-verwerfen">Erfassung verwerfen</button>` : ""}
+    ${c.gespeichert && !c.gesendet ? `<button class="btn btn-danger" id="btn-verwerfen">Erfassung verwerfen</button>` : ""}
+    ${c.gesendet ? `<p class="note">Bereits an den Server gesendet. Zum Korrigieren einfach neue Werte eintragen und erneut speichern.</p>` : ""}
   `;
 }
 
@@ -251,6 +295,11 @@ function bindView() {
     $("btn-liste").onclick = () => $("liste-file").click();
     $("btn-neu").onclick = () => { state.cur = {}; state.view = "neu"; render(); };
     $("btn-export").onclick = exportieren;
+    const bs = $("btn-sync"); if (bs) bs.onclick = () => syncen(true);
+    const ba = $("btn-abmelden"); if (ba) ba.onclick = abmelden;
+    const bl = $("btn-zum-login"); if (bl) bl.onclick = async () => { await setMeta("lokal", false); render(); };
+    $("f-einheit").onchange = (e) => { state.fEinheit = e.target.value; render(); };
+    $("f-bezirk").onchange = (e) => { state.fBezirk = e.target.value; render(); };
     $("suche").oninput = (e) => { state.suche = e.target.value; const pos = e.target.selectionStart; render(); const s = $("suche"); s.focus(); s.setSelectionRange(pos, pos); };
     document.querySelectorAll("[data-filter]").forEach((b) => (b.onclick = () => { state.filter = b.dataset.filter; render(); }));
     document.querySelectorAll(".item").forEach((it) => (it.onclick = () => oeffne(it.dataset.key)));
@@ -278,7 +327,7 @@ function oeffne(key) {
     key, name: h.name, nrNeu: h.nrNeu, nrAlt: h.nrAlt, einheit: h.einheit, bezirk: h.bezirk, neu: false,
     vorhandenPos: hatPos(h), vorhandenLat: h.lat, vorhandenLng: h.lng, vorhandenNw: h.nennweite || "",
     lat: n ? n.lat : null, lng: n ? n.lng : null, acc: n ? n.acc : null, zeit: n ? n.zeit : null,
-    nennweite: n ? n.nennweite : "", gespeichert: !!n,
+    nennweite: n ? n.nennweite : "", gespeichert: !!n, gesendet: !!(n && n.gesendet),
   };
   state.view = "erfassen"; render();
 }
@@ -347,13 +396,14 @@ async function speichern() {
   const eintrag = {
     key: c.key, name: c.name, nrNeu: c.nrNeu || "", nrAlt: c.nrAlt || "", einheit: c.einheit || "", bezirk: c.bezirk || "",
     nennweite: nw, lat, lng, acc: lat !== null && Number.isFinite(c.acc) ? c.acc : null, zeit: lat !== null ? (c.zeit || new Date().toISOString()) : null,
-    neu: !!c.neu, geaendert: new Date().toISOString(), exportiert: null,
+    neu: !!c.neu, geaendert: new Date().toISOString(), exportiert: null, gesendet: null, helfer: state.meta.helfer || "",
   };
   await idbPut("nachtrag", eintrag);
   state.nachtrag.set(c.key, eintrag);
   stoppeMessung();
   state.view = "home"; state.cur = null; render();
   showToast("Gespeichert");
+  syncen(false);
 }
 
 async function verwerfen() {
@@ -424,6 +474,94 @@ async function exportieren() {
   showToast(`${eintraege.length} Eintrag/Einträge exportiert`);
 }
 
+/* ---------- Anmeldung (gemeinsamer Helfer-Zugang) ---------- */
+function renderLogin() {
+  return `
+    <div class="card">
+      <h3>Anmelden</h3>
+      <p class="note">Mit dem Helfer-Passwort werden deine Erfassungen automatisch an Simone gesendet. Ohne Netz wird auf dem Handy zwischengespeichert.</p>
+      <label class="lbl">Dein Name (damit man sieht, wer erfasst hat)</label>
+      <input type="text" id="l-name" value="${esc(state.meta.helfer || "")}" autocomplete="name" />
+      <label class="lbl">Helfer-Passwort</label>
+      <input type="password" id="l-pass" autocomplete="current-password" />
+      <button class="btn btn-primary" id="btn-login">Anmelden</button>
+      <button class="btn btn-ghost" id="btn-lokal">Ohne Anmeldung nur lokal arbeiten</button>
+      <p class="note" id="l-fehler"></p>
+    </div>`;
+}
+function bindLogin() {
+  const $ = (id) => document.getElementById(id);
+  $("btn-lokal").onclick = async () => { await setMeta("lokal", true); render(); };
+  $("btn-login").onclick = async () => {
+    const name = $("l-name").value.trim(), pass = $("l-pass").value;
+    if (!name) { $("l-fehler").textContent = "Bitte deinen Namen eintragen."; return; }
+    if (!pass) { $("l-fehler").textContent = "Bitte das Passwort eintragen."; return; }
+    if (!state.sb) { $("l-fehler").textContent = "Server-Bibliothek nicht geladen (Internet nötig)."; return; }
+    if (!navigator.onLine) { $("l-fehler").textContent = "Zum Anmelden wird Internet gebraucht."; return; }
+    $("btn-login").disabled = true;
+    const { error } = await state.sb.auth.signInWithPassword({ email: HELFER_EMAIL, password: pass });
+    if (error) { $("btn-login").disabled = false; $("l-fehler").textContent = /invalid/i.test(error.message) ? "Passwort stimmt nicht." : "Anmeldung nicht möglich: " + error.message; return; }
+    await setMeta("helfer", name); await setMeta("angemeldet", true); await setMeta("lokal", false);
+    render(); syncen(false);
+  };
+}
+async function abmelden() {
+  if (ungesendet() > 0 && !confirm(`${ungesendet()} Erfassung(en) sind noch nicht gesendet und bleiben auf dem Gerät. Trotzdem abmelden?`)) return;
+  try { await state.sb.auth.signOut(); } catch (e) {}
+  await setMeta("angemeldet", false);
+  render();
+}
+
+/* ---------- Abgleich mit dem Server ---------- */
+function syncText() {
+  const s = state.sync;
+  if (s.laeuft) return "Abgleich läuft …";
+  if (s.fehler) return `⚠ ${esc(s.fehler)}`;
+  const n = ungesendet();
+  const zeit = s.zuletzt ? ` Letzter Abgleich ${fmtZeit(s.zuletzt)}.` : "";
+  return (n === 0 ? "Alles gesendet." : `${n} Erfassung(en) warten auf Netz.`) + zeit;
+}
+function zeigeSync() { const el = document.getElementById("sync-info"); if (el) el.innerHTML = syncText(); }
+
+async function syncen(meldung) {
+  if (!angemeldet() || !state.sb || state.sync.laeuft) return;
+  if (!navigator.onLine) { if (meldung) showToast("Kein Netz. Es wird gesendet, sobald wieder Empfang da ist."); return; }
+  state.sync.laeuft = true; state.sync.fehler = null; zeigeSync();
+  try {
+    const { data: ses } = await state.sb.auth.getSession();
+    if (!ses.session) { await setMeta("angemeldet", false); state.sync.laeuft = false; render(); showToast("Bitte neu anmelden"); return; }
+    for (const e of [...state.nachtrag.values()]) {
+      if (e.gesendet && e.geaendert <= e.gesendet) continue;
+      const zeile = {
+        helfer: e.helfer || state.meta.helfer || "?", key: e.key, name: e.name, nr_neu: e.nrNeu || "", nr_alt: e.nrAlt || "",
+        einheit: e.einheit || "", bezirk: e.bezirk || "", nennweite: e.nennweite || "", lat: e.lat, lng: e.lng,
+        genauigkeit_m: e.acc ?? null, erfasst_am: e.zeit || e.geaendert, neu: !!e.neu,
+      };
+      const { error } = await state.sb.from("nachtrag").upsert(zeile, { onConflict: "key,helfer" });
+      if (error && error.code !== "42501") throw error;
+      // 42501: Eintrag wurde schon von Simone übernommen und ist gesperrt → nicht erneut versuchen
+      e.gesendet = new Date().toISOString();
+      await idbPut("nachtrag", e);
+    }
+    const alle = [];
+    for (let von = 0; ; von += 1000) {
+      const { data, error } = await state.sb.from("nachtrag").select("id,key,helfer,lat,nennweite,status").range(von, von + 999);
+      if (error) throw error;
+      alle.push(...data);
+      if (data.length < 1000) break;
+    }
+    await idbReplaceAll("remote", alle);
+    baueRemote(alle);
+    state.sync.zuletzt = new Date().toISOString();
+    if (meldung) showToast("Abgleich fertig");
+  } catch (err) {
+    console.error(err);
+    state.sync.fehler = "Senden nicht möglich (" + (err.message || err) + "). Es wird später erneut versucht.";
+  }
+  state.sync.laeuft = false;
+  if (state.view === "home") render(); else zeigeSync();
+}
+
 /* ---------- Start ---------- */
 (async function start() {
   try {
@@ -433,7 +571,10 @@ async function exportieren() {
     document.getElementById("content").innerHTML = `<div class="card"><h3>Speicher nicht verfügbar</h3><p class="note">Der Browser erlaubt keinen lokalen Speicher (privater Modus?). Bitte in einem normalen Browserfenster öffnen.</p></div>`;
     return;
   }
+  try { state.sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: true, autoRefreshToken: true } }); } catch (e) { console.warn("Supabase nicht geladen", e); }
+  window.addEventListener("online", () => syncen(false));
   document.getElementById("liste-file").addEventListener("change", (e) => { const f = e.target.files[0]; if (f) ladeListe(f); e.target.value = ""; });
   render();
+  syncen(false);
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js").catch(() => {});
 })();

@@ -316,7 +316,7 @@ function showToast(msg) {
 // Eigenes Ja/Nein-Bestätigungs-Popup für alle Löschen-Aktionen (der native Browser-confirm() lässt
 // sich nicht mit "Ja"/"Nein" statt "OK"/"Abbrechen" beschriften). Ruft aufJa() nur bei "Ja" auf; bei
 // "Nein" oder Klick auf den Hintergrund passiert nichts (Abbruch).
-function zeigeJaNeinDialog(frage, aufJa) {
+function zeigeJaNeinDialog(frage, aufJa, aufNein) {
   const overlay = document.createElement("div");
   overlay.className = "janein-overlay";
   overlay.innerHTML = `
@@ -330,7 +330,7 @@ function zeigeJaNeinDialog(frage, aufJa) {
   `;
   document.body.appendChild(overlay);
   overlay.addEventListener("click", (e) => { if (e.target === overlay) overlay.remove(); });
-  overlay.querySelector(".janein-nein").addEventListener("click", () => overlay.remove());
+  overlay.querySelector(".janein-nein").addEventListener("click", () => { overlay.remove(); if (aufNein) aufNein(); });
   overlay.querySelector(".janein-ja").addEventListener("click", () => { overlay.remove(); aufJa(); });
 }
 
@@ -1679,6 +1679,16 @@ function renderDatenAppAdmin() {
       </div>
       <button id="btn-nachtrag" class="btn btn-outline btn-full">Nachtrag-Datei auswählen</button>
     </div>
+    <div class="card" style="box-shadow:none;border:1px solid #e5e7eb;">
+      <div style="display:flex;gap:12px;align-items:center;margin-bottom:12px;">
+        <div class="hydrant-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
+        <div>
+          <div style="font-weight:600;font-size:14px;">Nachträge der Helfer</div>
+          <div style="font-size:12px;color:#6b7280;">Holt alle neu erfassten Positionen und Nennweiten vom Server. Es werden nur leere Felder ergänzt, Abweichungen werden extra abgefragt.</div>
+        </div>
+      </div>
+      <button id="btn-helfer-nachtrag" class="btn btn-outline btn-full">Offene Nachträge abholen</button>
+    </div>
   `;
 
   const funktionenInhalt = `
@@ -2308,6 +2318,8 @@ function attachHandlers() {
     if (btnImport) btnImport.addEventListener("click", () => document.getElementById("import-file").click());
     const btnNachtrag = document.getElementById("btn-nachtrag");
     if (btnNachtrag) btnNachtrag.addEventListener("click", () => document.getElementById("nachtrag-file").click());
+    const btnHelfer = document.getElementById("btn-helfer-nachtrag");
+    if (btnHelfer) btnHelfer.addEventListener("click", holeHelferNachtrag);
     const btnTiles = document.getElementById("btn-download-tiles");
     if (btnTiles) btnTiles.addEventListener("click", downloadTiles);
     const btnArchivJetzt = document.getElementById("btn-archiv-jetzt");
@@ -3016,8 +3028,81 @@ function handleImportFile(e) {
   reader.readAsBinaryString(file);
 }
 
-/* Nachtrag aus der Erfassungs-App: ergänzt NUR leere Position/Nennweite bestehender Hydranten.
-   Legt nie etwas an, löscht nie etwas. Abweichungen von vorhandenen Werten nur nach zweiter Rückfrage. */
+/* Nachtrag aus der Erfassungs-App (Datei oder Server): ergänzt NUR leere Position/Nennweite bestehender
+   Hydranten. Legt nie etwas an, löscht nie etwas. Abweichungen von vorhandenen Werten nur nach zweiter Rückfrage. */
+function nachtragSchluessel(h) {
+  const n = String(h.nrNeu || "").trim().toLowerCase();
+  return n ? "n:" + n : "t:" + String(h.name || "").trim().toLowerCase() + "|" + String(h.nrAlt || "").trim().toLowerCase();
+}
+function nachtragZahl(v) { if (v === undefined || v === null || v === "") return null; const x = parseFloat(String(v).replace(",", ".")); return Number.isFinite(x) ? x : null; }
+function nachtragNennweite(v) { const z = String(v ?? "").trim().replace(/^H-?/i, "").replace(/[^0-9]/g, ""); return z ? "H-" + z : ""; }
+
+/* items: [{name, nrNeu, nrAlt, lat, lng, nw, acc, zeit, ids:[]}] – mehrere Einträge zum selben Hydranten werden
+   zusammengefasst (genaueste Position, jüngste Nennweite). opts.nachher({uebernommen:[ids], verworfen:[ids]}) */
+function verarbeiteNachtrag(items, opts = {}) {
+  const gruppen = new Map();
+  for (const it of items) {
+    const k = nachtragSchluessel(it);
+    const g = gruppen.get(k) || { name: it.name, nrNeu: it.nrNeu, nrAlt: it.nrAlt, lat: null, lng: null, acc: Infinity, nw: "", nwZeit: "", ids: [] };
+    const lateral = it.lat !== null && it.lng !== null && Math.abs(it.lat) <= 90 && Math.abs(it.lng) <= 180;
+    if (lateral && (g.lat === null || (it.acc ?? 1e9) < g.acc)) { g.lat = it.lat; g.lng = it.lng; g.acc = it.acc ?? 1e9; }
+    if (it.nw && String(it.zeit || "") >= g.nwZeit) { g.nw = it.nw; g.nwZeit = String(it.zeit || ""); }
+    g.ids.push(...(it.ids || []));
+    gruppen.set(k, g);
+  }
+  const bestand = new Map();
+  state.hydranten.forEach((h) => { const k = nachtragSchluessel(h); if (!bestand.has(k)) bestand.set(k, h); });
+  const ergaenzt = new Map(), abweich = new Map(), keinTreffer = [], ohneAenderung = [];
+  const idsVon = new Map(); // hydrant.id -> ids der Nachtrag-Zeilen
+  for (const g of gruppen.values()) {
+    const ziel = bestand.get(nachtragSchluessel(g));
+    if (!ziel) { keinTreffer.push(g); continue; }
+    idsVon.set(ziel.id, g.ids);
+    const sofort = {}, spaeter = {};
+    if (g.lat !== null) {
+      if (ziel.lat === null || ziel.lat === undefined || ziel.lng === null || ziel.lng === undefined) { sofort.lat = g.lat; sofort.lng = g.lng; }
+      else if (Math.abs(ziel.lat - g.lat) > 0.00001 || Math.abs(ziel.lng - g.lng) > 0.00001) { spaeter.lat = g.lat; spaeter.lng = g.lng; }
+    }
+    if (g.nw) {
+      if (!ziel.durchfluss) sofort.durchfluss = g.nw;
+      else if (ziel.durchfluss !== g.nw) spaeter.durchfluss = g.nw;
+    }
+    if (Object.keys(sofort).length) ergaenzt.set(ziel.id, { ...ziel, ...sofort });
+    if (Object.keys(spaeter).length) abweich.set(ziel.id, spaeter);
+    if (!Object.keys(sofort).length && !Object.keys(spaeter).length) ohneAenderung.push(ziel.id);
+  }
+  if (gruppen.size === 0) { showToast("Keine gültigen Einträge gefunden"); return; }
+  const nameVon = (id) => (state.hydranten.find((h) => h.id === id) || {}).name || "";
+  const unbekannt = keinTreffer.length ? ` Nicht gefunden (bleiben offen): ${keinTreffer.slice(0, 3).map((g) => g.name).join(", ")}${keinTreffer.length > 3 ? " …" : ""}.` : "";
+  const frage = `Nachtrag einlesen? ${ergaenzt.size} Hydranten werden ergänzt (nur leere Felder), ${abweich.size} haben abweichende Werte (zweite Rückfrage), ${ohneAenderung.length} sind schon gleich, ${keinTreffer.length} nicht gefunden.${unbekannt}`;
+  const anwenden = async (liste) => {
+    const ts = liste.map((u) => ({ ...u, geaendertVon: state.session, _dirty: true, _v: (u._v || 0) + 1 }));
+    if (!ts.length) return;
+    await dbPutMany(ts);
+    const m = new Map(ts.map((u) => [u.id, u]));
+    state.hydranten = state.hydranten.map((h) => m.get(h.id) || h);
+    syncAlles();
+    render();
+  };
+  const idsFuer = (hids) => hids.flatMap((id) => idsVon.get(id) || []);
+  zeigeJaNeinDialog(frage, async () => {
+    await anwenden([...ergaenzt.values()]);
+    showToast(`Nachtrag: ${ergaenzt.size} ergänzt`);
+    const fertig = [...ergaenzt.keys()].filter((id) => !abweich.has(id)).concat(ohneAenderung);
+    if (opts.nachher) await opts.nachher({ uebernommen: idsFuer(fertig), verworfen: [] });
+    if (abweich.size > 0) {
+      zeigeJaNeinDialog(`${abweich.size} Hydranten haben bereits andere Werte (z. B. ${[...abweich.keys()].slice(0, 2).map(nameVon).join(", ")}). Mit den Werten aus dem Nachtrag überschreiben? (Nein = bestehende behalten)`, async () => {
+        const liste = [...abweich.entries()].map(([id, felder]) => ({ ...state.hydranten.find((h) => h.id === id), ...felder }));
+        await anwenden(liste);
+        showToast(`${liste.length} Hydranten überschrieben`);
+        if (opts.nachher) await opts.nachher({ uebernommen: idsFuer([...abweich.keys()]), verworfen: [] });
+      }, async () => {
+        if (opts.nachher) await opts.nachher({ uebernommen: [], verworfen: idsFuer([...abweich.keys()].filter((id) => !ergaenzt.has(id))) });
+      });
+    }
+  });
+}
+
 function handleNachtragFile(e) {
   if (state.session !== "App-Admin") { showToast("Nachtrag-Import ist nur für den App-Admin verfügbar"); e.target.value = ""; return; }
   const file = e.target.files[0];
@@ -3027,66 +3112,12 @@ function handleNachtragFile(e) {
     try {
       const wb = XLSX.read(evt.target.result, { type: "binary" });
       const sheet = wb.Sheets["Nachtrag"] || wb.Sheets[wb.SheetNames[0]];
-      const rows = XLSX.utils.sheet_to_json(sheet);
-      const key = (h) => {
-        const n = String(h.nrNeu || "").trim().toLowerCase();
-        return n ? "n:" + n : "t:" + String(h.name || "").trim().toLowerCase() + "|" + String(h.nrAlt || "").trim().toLowerCase();
-      };
-      const num = (v) => { if (v === undefined || v === null || v === "") return null; const x = parseFloat(String(v).replace(",", ".")); return Number.isFinite(x) ? x : null; };
-      const bestand = new Map();
-      state.hydranten.forEach((h) => { const k = key(h); if (!bestand.has(k)) bestand.set(k, h); });
-      const ergaenzt = new Map(), abweich = new Map(), keinTreffer = [];
-      let gelesen = 0;
-      const kopie = (h) => ergaenzt.get(h.id) || abweich.get(h.id) || { ...h };
-      for (const r of rows) {
-        const name = String(r.Name ?? "").trim();
-        if (!name) continue;
-        gelesen++;
-        const ziel = bestand.get(key({ name, nrNeu: String(r.HydrantennummerNeu ?? "").trim(), nrAlt: String(r.HydrantennummerAlt ?? "").trim() }));
-        if (!ziel) { keinTreffer.push(name); continue; }
-        const lat = num(r.Breitengrad), lng = num(r.Laengengrad);
-        const nwRaw = String(r.Nennweite ?? "").trim().replace(/^H-?/i, "").replace(/[^0-9]/g, "");
-        const nw = nwRaw ? "H-" + nwRaw : "";
-        const lateral = lat !== null && lng !== null && Math.abs(lat) <= 90 && Math.abs(lng) <= 180;
-        const sofort = {}, spaeter = {};
-        if (lateral) {
-          if (ziel.lat === null || ziel.lat === undefined || ziel.lng === null || ziel.lng === undefined) { sofort.lat = lat; sofort.lng = lng; }
-          else if (Math.abs(ziel.lat - lat) > 0.00001 || Math.abs(ziel.lng - lng) > 0.00001) { spaeter.lat = lat; spaeter.lng = lng; }
-        }
-        if (nw) {
-          if (!ziel.durchfluss) sofort.durchfluss = nw;
-          else if (ziel.durchfluss !== nw) spaeter.durchfluss = nw;
-        }
-        if (Object.keys(sofort).length) { const u = kopie(ziel); Object.assign(u, sofort); ergaenzt.set(ziel.id, u); }
-        if (Object.keys(spaeter).length) { abweich.set(ziel.id, { id: ziel.id, felder: spaeter }); }
-      }
-      if (gelesen === 0) { showToast("Keine gültigen Zeilen gefunden"); return; }
-      const nameVon = (id) => (state.hydranten.find((h) => h.id === id) || {}).name || "";
-      const unbekannt = keinTreffer.length ? ` Nicht gefunden (werden übersprungen): ${keinTreffer.slice(0, 3).join(", ")}${keinTreffer.length > 3 ? " …" : ""}.` : "";
-      const frage = `Nachtrag einlesen? ${ergaenzt.size} Hydranten werden ergänzt (nur leere Felder), ${abweich.size} haben abweichende Werte (zweite Rückfrage), ${keinTreffer.length} nicht gefunden.${unbekannt}`;
-      const anwenden = async (liste) => {
-        const ts = liste.map((u) => ({ ...u, geaendertVon: state.session, _dirty: true, _v: (u._v || 0) + 1 }));
-        if (!ts.length) return;
-        await dbPutMany(ts);
-        const m = new Map(ts.map((u) => [u.id, u]));
-        state.hydranten = state.hydranten.map((h) => m.get(h.id) || h);
-        syncAlles();
-        render();
-      };
-      zeigeJaNeinDialog(frage, async () => {
-        await anwenden([...ergaenzt.values()]);
-        showToast(`Nachtrag: ${ergaenzt.size} ergänzt`);
-        if (abweich.size > 0) {
-          zeigeJaNeinDialog(`${abweich.size} Hydranten haben bereits andere Werte (z. B. ${[...abweich.keys()].slice(0, 2).map(nameVon).join(", ")}). Mit den Werten aus dem Nachtrag überschreiben? (Nein = bestehende behalten)`, async () => {
-            const liste = [...abweich.values()].map(({ id, felder }) => {
-              const basis = state.hydranten.find((h) => h.id === id);
-              return { ...basis, ...felder };
-            });
-            await anwenden(liste);
-            showToast(`${liste.length} Hydranten überschrieben`);
-          });
-        }
-      });
+      const items = XLSX.utils.sheet_to_json(sheet).map((r) => ({
+        name: String(r.Name ?? "").trim(), nrNeu: String(r.HydrantennummerNeu ?? "").trim(), nrAlt: String(r.HydrantennummerAlt ?? "").trim(),
+        lat: nachtragZahl(r.Breitengrad), lng: nachtragZahl(r.Laengengrad), nw: nachtragNennweite(r.Nennweite),
+        acc: nachtragZahl(r.Genauigkeit_m), zeit: String(r.Erfasst_am ?? ""), ids: [],
+      })).filter((it) => it.name);
+      verarbeiteNachtrag(items);
     } catch (err) {
       console.error(err);
       showToast("Nachtrag konnte nicht gelesen werden");
@@ -3095,6 +3126,29 @@ function handleNachtragFile(e) {
     }
   };
   reader.readAsBinaryString(file);
+}
+
+/* Offene Nachträge der Helfer vom Server holen und übernehmen */
+async function holeHelferNachtrag() {
+  if (state.session !== "App-Admin") { showToast("Nur für den App-Admin verfügbar"); return; }
+  if (!sb || !navigator.onLine) { showToast("Dafür ist eine Internetverbindung nötig"); return; }
+  const { data, error } = await sb.from("nachtrag").select("*").eq("status", "offen").order("erfasst_am").limit(1000);
+  if (error) { console.error(error); showToast("Nachträge konnten nicht geladen werden"); return; }
+  if (!data.length) { showToast("Keine offenen Nachträge von Helfern"); return; }
+  const items = data.map((r) => ({
+    name: r.name, nrNeu: r.nr_neu, nrAlt: r.nr_alt, lat: r.lat, lng: r.lng, nw: r.nennweite,
+    acc: r.genauigkeit_m, zeit: r.erfasst_am, ids: [r.id],
+  }));
+  const markieren = async (ids, status) => {
+    if (!ids.length) return;
+    for (let i = 0; i < ids.length; i += 100) {
+      const { error: e2 } = await sb.from("nachtrag").update({ status }).in("id", ids.slice(i, i + 100));
+      if (e2) { console.error(e2); showToast("Status der Nachträge konnte nicht gesetzt werden"); return; }
+    }
+  };
+  verarbeiteNachtrag(items, {
+    nachher: async ({ uebernommen, verworfen }) => { await markieren(uebernommen, "uebernommen"); await markieren(verworfen, "verworfen"); },
+  });
 }
 
 function renderInfo() {
