@@ -200,12 +200,14 @@ function renderHome() {
     </div>
 
     <div class="card">
-      <h3>3. Exportieren</h3>
-      <p class="note">Erzeugt eine Excel-Datei mit allen erfassten Werten. Diese Datei in der Hauptapp unter Daten → „Nachtrag importieren“ einlesen (App-Admin).${state.meta.letzterExport ? `<br>Letzter Export: ${fmtZeit(state.meta.letzterExport)}` : ""}</p>
+      <h3>${angemeldet() ? "3. Sicherung (optional)" : "3. Exportieren"}</h3>
+      <p class="note">${angemeldet() ? "Die Erfassungen gehen automatisch an den Server und sind in der Hauptapp unter Daten abrufbar. Die Excel-Datei ist nur eine zusätzliche Sicherung." : "Erzeugt eine Excel-Datei mit allen erfassten Werten. Diese Datei in der Hauptapp unter Daten → „Nachtrag importieren“ einlesen (App-Admin)."}${state.meta.letzterExport ? `<br>Letzter Export: ${fmtZeit(state.meta.letzterExport)}` : ""}</p>
       <button class="btn btn-primary" id="btn-export" ${state.nachtrag.size === 0 ? "disabled" : ""}>Export als Excel (${state.nachtrag.size})</button>
     </div>
 
-    <p class="note">Diese App speichert nur auf diesem Gerät und ist unabhängig von der Hauptapp. Browser-Daten dieser App erst löschen, wenn alles exportiert ist.</p>
+    <p class="note">${angemeldet()
+      ? "Erfassungen werden automatisch an den Server gesendet, sobald Netz da ist, und sind dann in der Hauptapp abrufbar. Bis oben „Alles gesendet“ steht, liegen sie nur auf diesem Gerät. Browser-Daten dieser App bis dahin nicht löschen."
+      : "Ohne Anmeldung speichert diese App nur auf diesem Gerät. Browser-Daten erst löschen, wenn alles exportiert ist."}</p>
   `;
 }
 
