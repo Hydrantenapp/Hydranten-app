@@ -799,7 +799,7 @@ function vergleicheStrasseHausnummer(a, b) {
   return pa.hausnr.localeCompare(pb.hausnr, "de", { numeric: true });
 }
 
-function filteredList() {
+function filteredList(ohneBezirk) {
   const q = state.search.trim().toLowerCase();
   let list = state.hydranten;
   if (q) list = list.filter((h) =>
@@ -810,7 +810,7 @@ function filteredList() {
     (h.durchfluss || "").toLowerCase().includes(q)
   );
   if (state.zustandFilter !== "alle") list = list.filter((h) => h.zustand === state.zustandFilter);
-  if (state.bezirkFilter !== "alle") list = list.filter((h) => (h.bezirk || "") === state.bezirkFilter);
+  if (!ohneBezirk && state.bezirkFilter !== "alle") list = list.filter((h) => (h.bezirk || "") === state.bezirkFilter);
   return withDistance(list);
 }
 
@@ -1357,29 +1357,30 @@ function renderKarte() {
 }
 
 function renderNaehe() {
-  const list = filteredList();
+  const list = filteredList(true); // Bezirksfilter gilt hier nicht - es zählt allein die Entfernung
   const nearest = list[0];
   let hero;
   if (!state.userLoc) {
     hero = `
-      <div class="hero-box">
-        <div class="hero-eyebrow">Einsatz-Modus</div>
-        <p style="font-size:14px;opacity:0.9;margin-bottom:14px;">Standort abrufen, um nahegelegene Hydranten zu sehen.</p>
-        <button id="btn-locate" class="btn" style="background:white;color:#7A1B15;border-radius:999px;padding:11px 22px;">Standort abrufen</button>
+      <div class="hero-box hero-kompakt">
+        <p style="font-size:13px;opacity:0.9;margin:0 0 10px;">Standort abrufen, um nahegelegene Hydranten zu sehen.</p>
+        <button id="btn-locate" class="btn" style="background:white;color:#7A1B15;border-radius:999px;padding:9px 20px;">Standort abrufen</button>
         <p id="loc-error" class="error-text" style="color:#FCA5A5;"></p>
       </div>`;
   } else if (nearest) {
     hero = `
-      <div class="hero-box">
-        <div class="hero-eyebrow">Einsatz-Modus</div>
-        <div class="hero-big">${fmtDist(nearest.dist)}</div>
-        <div class="hero-sub">nächster Hydrant: ${esc(nearest.name)}</div>
-        <button id="btn-locate" class="btn-ghost btn" style="margin-top:10px;background:transparent;border:none;color:white;text-decoration:underline;font-size:12px;padding:0;">Standort aktualisieren</button>
-      </div>`;
+      <div class="hero-box hero-kompakt">
+        <div class="hero-zeile">
+          <div class="hero-big">${fmtDist(nearest.dist)}</div>
+          <div class="hero-sub">nächster Hydrant:<br>${esc(nearest.name)}</div>
+        </div>
+        <button id="btn-locate" class="btn-ghost btn" style="margin-top:6px;background:transparent;border:none;color:white;text-decoration:underline;font-size:12px;padding:0;">Standort aktualisieren</button>
+      </div>
+      <div class="card" style="padding:0;overflow:hidden;"><div id="naehe-map" class="naehe-map"></div></div>`;
   } else {
-    hero = `<div class="hero-box"><div class="hero-eyebrow">Einsatz-Modus</div><p style="font-size:14px;">Keine Hydranten gefunden.</p></div>`;
+    hero = `<div class="hero-box hero-kompakt"><p style="font-size:14px;margin:0;">Keine Hydranten gefunden.</p></div>`;
   }
-  return hero + bezirkSelectHTML() + filterChipsHTML() + (state.userLoc ? (list.length === 0 ? `<div class="empty-state">Keine Treffer für diesen Filter.</div>` : list.map(hydrantRowHTML).join("")) : "");
+  return hero + filterChipsHTML() + (state.userLoc ? (list.length === 0 ? `<div class="empty-state">Keine Treffer für diesen Filter.</div>` : list.map(hydrantRowHTML).join("")) : "");
 }
 
 function renderHydrantenkontrolle() {
@@ -2398,6 +2399,16 @@ function attachHandlers() {
   }
 
   if (state.tab === "naehe") {
+    if (state.userLoc && document.getElementById("naehe-map")) {
+      const nahe = filteredList(true).slice(0, 12);
+      ensureLeafletMap(nahe, "naehe-map");
+      if (leafletMap && typeof L !== "undefined") {
+        const me = [state.userLoc.lat, state.userLoc.lng];
+        L.circleMarker(me, { radius: 7, color: "#fff", weight: 2, fillColor: "#1E6FD9", fillOpacity: 1 }).addTo(leafletMap);
+        const pts = nahe.filter((h) => typeof h.lat === "number").map((h) => [h.lat, h.lng]).concat([me]);
+        if (pts.length) leafletMap.fitBounds(pts, { padding: [24, 24], maxZoom: 18 });
+      }
+    }
     const btn = document.getElementById("btn-locate");
     if (btn) btn.addEventListener("click", () => {
       btn.textContent = "Standort wird ermittelt…";
