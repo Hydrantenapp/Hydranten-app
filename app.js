@@ -1529,7 +1529,7 @@ function renderForm(h) {
         ? `<input type="hidden" id="f-bezirk" value="${esc(h.bezirk)}" />`
         : fieldHTML("f-bezirk", "Bezirk", `<input id="f-bezirk" value="${esc(h.bezirk)}" placeholder="z. B. 34" list="bezirk-vorschlaege" ${stammdatenLocked ? lockedAttr : ""} />`)}
       <datalist id="bezirk-vorschlaege">${alleBezirke().map((b) => `<option value="${esc(b)}"></option>`).join("")}</datalist>
-      ${kompakt && !formFeature("nennweiteEditierbar") && h.durchfluss ? `<p style="font-size:12.5px;color:#6b7280;margin:-6px 0 12px;">Nennweite: <b>${esc(h.durchfluss)}</b></p>` : ""}
+      ${kompakt && !formFeature("nennweiteEditierbar") && h.durchfluss ? `<p style="font-size:18px;color:#111827;margin:-4px 0 14px;">Nennweite: <b style="font-size:22px;">${esc(h.durchfluss)}</b></p>` : ""}
       ${stammdatenLocked ? `<p style="font-size:12px;color:#9CA3AF;margin:-8px 0 14px;">🔒 Bezeichnung, Hydrantennummern und Bezirk können nur von Stadtwerke/App-Admin geändert werden.</p>` : ""}
       ${formFeature("koordinatenSichtbar") ? `<div class="row-2">
         ${fieldHTML("f-lat", "Breitengrad (optional)", `<input id="f-lat" value="${esc(h.lat)}" inputmode="decimal" placeholder="50.1109" />`)}
@@ -1597,8 +1597,9 @@ function renderForm(h) {
           <input type="file" id="f-foto-input" accept="image/*" capture="environment" class="hidden" />
         </div>
       </div>
-      ${fieldHTML("f-datum", "Letzte Kontrolle", `<input type="date" id="f-datum" value="${esc(todayStr())}" ${formFeature("datumEditierbar") ? "" : lockedAttr} />`)}
-      <p style="font-size:11px;color:#9CA3AF;margin:-8px 0 14px;">${formFeature("datumEditierbar") ? 'Wird beim Öffnen automatisch auf heute gesetzt (zählt für die Statistik als "kontrolliert") – bei Bedarf manuell änderbar.' : 'Wird automatisch auf heute gesetzt und zählt für die Statistik als "kontrolliert". Das Datum können nur Vollzugriffs-Rollen ändern.'}</p>
+      ${formFeature("datumEditierbar")
+        ? fieldHTML("f-datum", "Letzte Kontrolle", `<input type="date" id="f-datum" value="${esc(todayStr())}" />`) + `<p style="font-size:11px;color:#9CA3AF;margin:-8px 0 14px;">Wird beim Öffnen automatisch auf heute gesetzt (zählt für die Statistik als "kontrolliert") – bei Bedarf manuell änderbar.</p>`
+        : `<input type="hidden" id="f-datum" value="${esc(todayStr())}" />`}
       <p id="form-error" class="error-text"></p>
       <div class="btn-row">
         <button type="button" id="btn-cancel-form" class="btn btn-ghost">Abbrechen</button>
