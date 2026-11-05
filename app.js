@@ -1530,7 +1530,7 @@ function renderForm(h) {
         ? `<input type="hidden" id="f-bezirk" value="${esc(h.bezirk)}" />`
         : fieldHTML("f-bezirk", "Bezirk", `<input id="f-bezirk" value="${esc(h.bezirk)}" placeholder="z. B. 34" list="bezirk-vorschlaege" ${stammdatenLocked ? lockedAttr : ""} />`)}
       <datalist id="bezirk-vorschlaege">${alleBezirke().map((b) => `<option value="${esc(b)}"></option>`).join("")}</datalist>
-      ${kompakt && !formFeature("nennweiteEditierbar") && h.durchfluss ? `<p style="font-size:18px;color:#111827;margin:-4px 0 14px;">Nennweite: <b style="font-size:22px;">${esc(h.durchfluss)}</b></p>` : ""}
+      ${kompakt && !formFeature("nennweiteEditierbar") && h.durchfluss ? `<p style="font-size:14px;color:#374151;margin:-4px 0 14px;">Nennweite: <b style="font-size:15px;color:#111827;">${esc(h.durchfluss)}</b></p>` : ""}
       ${stammdatenLocked ? `<p style="font-size:12px;color:#9CA3AF;margin:-8px 0 14px;">🔒 Bezeichnung, Hydrantennummern und Bezirk können nur von Stadtwerke/App-Admin geändert werden.</p>` : ""}
       ${formFeature("koordinatenSichtbar") ? `<div class="row-2">
         ${fieldHTML("f-lat", "Breitengrad (optional)", `<input id="f-lat" value="${esc(h.lat)}" inputmode="decimal" placeholder="50.1109" />`)}
