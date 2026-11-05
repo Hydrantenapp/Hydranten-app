@@ -1206,6 +1206,7 @@ function setupPositionPicker(startLat, startLng) {
   const lockRow = document.getElementById("position-lock-row");
   function renderLockRow() {
     if (!lockRow) return;
+    if (!pinFrei) { lockRow.innerHTML = ""; return; }
     lockRow.innerHTML = positionLocked
       ? `<div class="position-lock-note">🔒 Position gesperrt (bereits gesetzt) <button type="button" id="btn-position-unlock" class="btn btn-ghost" style="padding:4px 10px;font-size:11px;">Entsperren zum Verschieben</button></div>`
       : `<div class="position-lock-note position-lock-note-open">🔓 Position entsperrt – Marker kann gezogen/angetippt werden <button type="button" id="btn-position-lock" class="btn btn-ghost" style="padding:4px 10px;font-size:11px;">Sperren</button></div>`;
