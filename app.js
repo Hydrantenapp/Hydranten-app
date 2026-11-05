@@ -1194,7 +1194,9 @@ function setupPositionPicker(startLat, startLng) {
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>-Mitwirkende',
   }).addTo(positionPickerMap);
 
-  positionPickerMarker = L.marker(center, { draggable: !positionLocked }).addTo(positionPickerMap);
+  // Einheiten sehen nur die Lage des Hydranten (Marker nicht verschiebbar), solange EINHEITEN_FORM.pinVersetzen aus ist.
+  const pinFrei = formFeature("pinVersetzen");
+  positionPickerMarker = (pinFrei || hatStart) ? L.marker(center, { draggable: pinFrei && !positionLocked }).addTo(positionPickerMap) : null;
 
   function uebernehmen(latlng) {
     document.getElementById("f-lat").value = latlng.lat.toFixed(6);
@@ -1222,14 +1224,28 @@ function setupPositionPicker(startLat, startLng) {
   }
   renderLockRow();
 
-  positionPickerMarker.on("dragend", () => uebernehmen(positionPickerMarker.getLatLng()));
+  if (positionPickerMarker && pinFrei) positionPickerMarker.on("dragend", () => uebernehmen(positionPickerMarker.getLatLng()));
   positionPickerMap.on("click", (e) => {
+    if (!pinFrei) return;
     if (positionLocked) { showToast("Position ist gesperrt – erst \"Entsperren\" antippen, um sie zu verschieben."); return; }
     positionPickerMarker.setLatLng(e.latlng);
     uebernehmen(e.latlng);
   });
 
+  let eigenDot = null, eigenKreis = null;
   positionPickerMap.on("locationfound", (e) => {
+    if (!pinFrei) {
+      // Nur den eigenen Standort anzeigen (blauer Punkt), damit man den Hydranten schneller findet. Nichts wird verändert.
+      if (eigenDot) { eigenDot.setLatLng(e.latlng); eigenKreis.setLatLng(e.latlng).setRadius(e.accuracy); }
+      else {
+        eigenKreis = L.circle(e.latlng, { radius: e.accuracy, color: "#1E6FD9", weight: 1, fillColor: "#1E6FD9", fillOpacity: 0.12 }).addTo(positionPickerMap);
+        eigenDot = L.circleMarker(e.latlng, { radius: 7, color: "#fff", weight: 2, fillColor: "#1E6FD9", fillOpacity: 1 }).addTo(positionPickerMap);
+      }
+      const pts = [e.latlng]; if (positionPickerMarker) pts.push(positionPickerMarker.getLatLng());
+      positionPickerMap.fitBounds(L.latLngBounds(pts), { padding: [40, 40], maxZoom: 19 });
+      showToast(`Dein Standort (±${Math.round(e.accuracy)} m)`);
+      return;
+    }
     positionPickerMarker.setLatLng(e.latlng);
     positionPickerMap.setView(e.latlng, 18);
     uebernehmen(e.latlng);
@@ -1452,12 +1468,24 @@ function openFotoLightbox(url) {
   document.body.appendChild(box);
 }
 
+/* Formular der Einheiten (Rollen ohne Vollzugriff): Was vorerfasst ist oder nur Vollzugriff braucht, ist ausgeblendet
+   bzw. gesperrt. Vollzugriffs-Rollen sehen immer alles. Zum schnellen Wiedereinbauen einfach den Schalter auf true setzen. */
+const EINHEITEN_FORM = {
+  einheitSichtbar: false,        // Feld "Einheit" (steht schon oben in der Kopfzeile)
+  nennweiteEditierbar: false,    // Nennweite (vorerfasst)
+  koordinatenSichtbar: false,    // Felder Breiten-/Längengrad (vorerfasst)
+  pinVersetzen: false,           // Marker ziehen/antippen und Entsperren-Schalter
+  datumEditierbar: false,        // "Letzte Kontrolle" (zählt für die Statistik)
+};
+const formFeature = (name) => isSonderrolle(state.session) || EINHEITEN_FORM[name];
+
 function renderForm(h) {
   const isEdit = !!h;
   h = h || { id: uid(), name: "", nrAlt: "", nrNeu: "", bezirk: "", einheit: isSonderrolle(state.session) ? "" : state.session, durchfluss: "", lat: "", lng: "", lage: "", zustand: "ok", besonderheiten: "", letzteKontrolle: todayStr() };
   const einheitLocked = !isSonderrolle(state.session);
   const stammdatenLocked = !canEditStammdaten(state.session);
   const lockedAttr = 'disabled style="background:#F4F5F6;color:#6b7280;"';
+  const kompakt = !isSonderrolle(state.session);
 
   if (formFotoUrl) { URL.revokeObjectURL(formFotoUrl); formFotoUrl = null; }
   if (h.foto instanceof Blob) formFotoUrl = URL.createObjectURL(h.foto);
@@ -1473,36 +1501,46 @@ function renderForm(h) {
   const lageFotoDarfLoeschen = lageFotoVorhanden && lageFotoDarfAendern;
 
   return `
-    <h2 style="font-weight:600;margin:0 0 14px;">${isEdit ? "Hydrant bearbeiten" : "Neuen Hydranten erfassen"}</h2>
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin:0 0 14px;">
+      <h2 style="font-weight:600;margin:0;">${isEdit ? "Hydrant bearbeiten" : "Neuen Hydranten erfassen"}</h2>
+      ${kompakt && h.bezirk ? `<span style="font-size:12px;color:#6b7280;background:#F4F5F6;border-radius:999px;padding:3px 10px;white-space:nowrap;">Bezirk ${esc(h.bezirk)}</span>` : ""}
+    </div>
     <form id="hydrant-form" data-id="${h.id}">
       ${fieldHTML("f-name", "Bezeichnung / Standortname", `<input id="f-name" value="${esc(h.name)}" placeholder="z. B. Marktplatz" ${stammdatenLocked ? lockedAttr : ""} required />`)}
-      ${fieldHTML("f-einheit", "Einheit", einheitLocked
-        ? `<input id="f-einheit" value="${esc(h.einheit)}" disabled style="background:#F4F5F6;color:#6b7280;" /><input type="hidden" id="f-einheit-value" value="${esc(h.einheit)}" />`
-        : `<select id="f-einheit">${EINHEITEN.map((e) => `<option value="${esc(e)}" ${h.einheit === e ? "selected" : ""}>${esc(e)}</option>`).join("")}</select>`
-      )}
-      ${fieldHTML("f-durchfluss", "Nennweite", `
+      ${!formFeature("einheitSichtbar")
+        ? `<input type="hidden" id="f-einheit-value" value="${esc(h.einheit)}" />`
+        : fieldHTML("f-einheit", "Einheit", einheitLocked
+          ? `<input id="f-einheit" value="${esc(h.einheit)}" disabled style="background:#F4F5F6;color:#6b7280;" /><input type="hidden" id="f-einheit-value" value="${esc(h.einheit)}" />`
+          : `<select id="f-einheit">${EINHEITEN.map((e) => `<option value="${esc(e)}" ${h.einheit === e ? "selected" : ""}>${esc(e)}</option>`).join("")}</select>`
+        )}
+      ${formFeature("nennweiteEditierbar")
+        ? fieldHTML("f-durchfluss", "Nennweite", `
         <div class="prefix-input">
           <span class="prefix-tag">H-</span>
           <input id="f-durchfluss" value="${esc((h.durchfluss || "").replace(/^H-?/i, ""))}" inputmode="numeric" placeholder="100" />
         </div>
-      `)}
+      `)
+        : `<input type="hidden" id="f-durchfluss" value="${esc(h.durchfluss || "")}" />`}
       <div class="row-2">
         ${fieldHTML("f-nrneu", "Hydrantennummer (neu)", `<input id="f-nrneu" value="${esc(h.nrNeu)}" placeholder="z. B. 04-112" ${stammdatenLocked ? lockedAttr : ""} />`)}
         ${fieldHTML("f-nralt", "Hydrantennummer (alt)", `<input id="f-nralt" value="${esc(h.nrAlt)}" placeholder="z. B. 112" ${stammdatenLocked ? lockedAttr : ""} />`)}
       </div>
-      ${fieldHTML("f-bezirk", "Bezirk", `<input id="f-bezirk" value="${esc(h.bezirk)}" placeholder="z. B. 34" list="bezirk-vorschlaege" ${stammdatenLocked ? lockedAttr : ""} />`)}
+      ${kompakt
+        ? `<input type="hidden" id="f-bezirk" value="${esc(h.bezirk)}" />`
+        : fieldHTML("f-bezirk", "Bezirk", `<input id="f-bezirk" value="${esc(h.bezirk)}" placeholder="z. B. 34" list="bezirk-vorschlaege" ${stammdatenLocked ? lockedAttr : ""} />`)}
       <datalist id="bezirk-vorschlaege">${alleBezirke().map((b) => `<option value="${esc(b)}"></option>`).join("")}</datalist>
+      ${kompakt && !formFeature("nennweiteEditierbar") && h.durchfluss ? `<p style="font-size:12.5px;color:#6b7280;margin:-6px 0 12px;">Nennweite: <b>${esc(h.durchfluss)}</b></p>` : ""}
       ${stammdatenLocked ? `<p style="font-size:12px;color:#9CA3AF;margin:-8px 0 14px;">🔒 Bezeichnung, Hydrantennummern und Bezirk können nur von Stadtwerke/App-Admin geändert werden.</p>` : ""}
-      <div class="row-2">
+      ${formFeature("koordinatenSichtbar") ? `<div class="row-2">
         ${fieldHTML("f-lat", "Breitengrad (optional)", `<input id="f-lat" value="${esc(h.lat)}" inputmode="decimal" placeholder="50.1109" />`)}
         ${fieldHTML("f-lng", "Längengrad (optional)", `<input id="f-lng" value="${esc(h.lng)}" inputmode="decimal" placeholder="8.6821" />`)}
-      </div>
+      </div>` : `<input type="hidden" id="f-lat" value="${esc(h.lat)}" /><input type="hidden" id="f-lng" value="${esc(h.lng)}" />`}
       <div class="field">
-        <span class="lbl">Position auf der Karte</span>
+        <span class="lbl">${formFeature("pinVersetzen") ? "Position auf der Karte" : "Lage auf der Karte"}</span>
         <div id="position-map"></div>
-        <div id="position-lock-row" class="position-lock-row"></div>
-        <button type="button" id="btn-gps-locate" class="btn btn-outline btn-full" style="margin-top:8px;">🎯 GPS-Standort ermitteln</button>
-        <p style="font-size:11px;color:#9CA3AF;margin-top:6px;">GPS ist bauartbedingt oft 3–10 m ungenau – Marker danach exakt auf den Schachtdeckel/Gehweg ziehen oder antippen.</p>
+        ${formFeature("pinVersetzen") ? `<div id="position-lock-row" class="position-lock-row"></div>` : ""}
+        <button type="button" id="btn-gps-locate" class="btn btn-outline btn-full" style="margin-top:8px;">${formFeature("pinVersetzen") ? "🎯 GPS-Standort ermitteln" : "🎯 Meinen Standort anzeigen"}</button>
+        <p style="font-size:11px;color:#9CA3AF;margin-top:6px;">${formFeature("pinVersetzen") ? "GPS ist bauartbedingt oft 3–10 m ungenau – Marker danach exakt auf den Schachtdeckel/Gehweg ziehen oder antippen." : "Der blaue Punkt zeigt deinen aktuellen Standort und hilft, den Hydranten schneller zu finden. Die Position des Hydranten bleibt dabei unverändert."}</p>
       </div>
       <input type="hidden" id="f-position-hatte-start" value="${typeof h.lat === "number" && typeof h.lng === "number" ? "1" : "0"}" />
       ${fieldHTML("f-lage", "Lage / Beschreibung", `<textarea id="f-lage" rows="2" placeholder="z. B. Gehweg vor Hausnummer 12, Deckel gelb">${esc(h.lage)}</textarea>`)}
@@ -1559,8 +1597,8 @@ function renderForm(h) {
           <input type="file" id="f-foto-input" accept="image/*" capture="environment" class="hidden" />
         </div>
       </div>
-      ${fieldHTML("f-datum", "Letzte Kontrolle", `<input type="date" id="f-datum" value="${esc(todayStr())}" />`)}
-      <p style="font-size:11px;color:#9CA3AF;margin:-8px 0 14px;">Wird beim Öffnen automatisch auf heute gesetzt (zählt für die Statistik als "kontrolliert") – bei Bedarf manuell änderbar.</p>
+      ${fieldHTML("f-datum", "Letzte Kontrolle", `<input type="date" id="f-datum" value="${esc(todayStr())}" ${formFeature("datumEditierbar") ? "" : lockedAttr} />`)}
+      <p style="font-size:11px;color:#9CA3AF;margin:-8px 0 14px;">${formFeature("datumEditierbar") ? 'Wird beim Öffnen automatisch auf heute gesetzt (zählt für die Statistik als "kontrolliert") – bei Bedarf manuell änderbar.' : 'Wird automatisch auf heute gesetzt und zählt für die Statistik als "kontrolliert". Das Datum können nur Vollzugriffs-Rollen ändern.'}</p>
       <p id="form-error" class="error-text"></p>
       <div class="btn-row">
         <button type="button" id="btn-cancel-form" class="btn btn-ghost">Abbrechen</button>
