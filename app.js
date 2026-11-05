@@ -736,7 +736,7 @@ async function syncArchiv() {
   const serverJahre = new Set(data.map((z) => z.jahr));
   for (const l of lokal) { if (!serverJahre.has(l.jahr)) await archivLokalLoeschen(l.jahr); }
   state.archivListe = await getAlleArchive();
-  if (neuGeladen > 0 && lokal.length > 0) showToast("📦 Neues Jahresarchiv verfügbar – im Reiter \"Daten\" herunterladen");
+  if (neuGeladen > 0 && lokal.length > 0 && isSonderrolle(state.session)) showToast("📦 Neues Jahresarchiv verfügbar – im Reiter \"Daten\" herunterladen");
 }
 async function archivLokalSpeichern(eintrag) {
   const db = await openDB();
@@ -1350,7 +1350,7 @@ function renderKarte() {
     ${filterChipsHTML()}
     <div class="card" style="padding:0;overflow:hidden;">
       <div id="leaflet-map"></div>
-      <p class="map-note" style="padding:8px 12px 10px;margin:0;">© OpenStreetMap-Mitwirkende · Für den Einsatz ohne Netz: Kacheln vorab im Reiter "Daten" herunterladen.</p>
+      <p class="map-note" style="padding:8px 12px 10px;margin:0;">© OpenStreetMap-Mitwirkende</p>
     </div>
     ${list.length === 0 ? `<div class="empty-state">Keine Treffer.</div>` : list.map(hydrantRowHTML).join("")}
   `;
@@ -1557,7 +1557,7 @@ function renderForm(h) {
           </div>
           <input type="file" id="f-lagefoto-input" accept="image/*" capture="environment" class="hidden" />
         </div>
-        ${!lageFotoDarfAendern ? `<p style="font-size:12px;color:#9CA3AF;margin-top:6px;">🔒 ${lageFotoVorhanden ? "Freigabe wurde zurückgenommen – dieses Foto kann nur noch von Vollzugriffs-Rollen geändert oder gelöscht werden." : "Aufnahme aktuell nicht freigegeben (durch Vollzugriffs-Rolle im Reiter \"Daten\" aktivierbar)."}</p>` : ""}
+        ${!lageFotoDarfAendern ? `<p style="font-size:12px;color:#9CA3AF;margin-top:6px;">🔒 ${lageFotoVorhanden ? "Freigabe wurde zurückgenommen – dieses Foto kann nur noch von Vollzugriffs-Rollen geändert oder gelöscht werden." : "Aufnahme aktuell nicht freigegeben (durch eine Vollzugriffs-Rolle aktivierbar)."}</p>` : ""}
       </div>
       <div class="field"><span class="lbl">Zustand</span>
         <div class="zustand-picker">
@@ -3755,6 +3755,11 @@ function showApp() {
   if (erfassenNavBtn) erfassenNavBtn.classList.toggle("hidden", !hatErfassenZugriff(state.session));
   if (!hatErfassenZugriff(state.session) && state.tab === "hinzufuegen") state.tab = "karte";
 
+  // Reiter "Daten" nur für Vollzugriffs-Rollen; Einheiten haben dort nichts zu tun.
+  const datenNavBtn = document.querySelector('.nav-item[data-tab="daten"]');
+  if (datenNavBtn) datenNavBtn.classList.toggle("hidden", !isSonderrolle(state.session));
+  if (!isSonderrolle(state.session) && state.tab === "daten") state.tab = "karte";
+
   const statistikBtn = document.getElementById("btn-statistik");
   if (statistikBtn) statistikBtn.classList.toggle("hidden", !hatStatistikZugriff(state.session));
   if (!hatStatistikZugriff(state.session) && state.tab === "statistik") state.tab = "karte";
@@ -3820,6 +3825,7 @@ async function init() {
 
   document.querySelectorAll(".nav-item").forEach((btn) => {
     btn.addEventListener("click", () => {
+      if (btn.dataset.tab === "daten" && !isSonderrolle(state.session)) return;
       if (btn.dataset.tab === "hinzufuegen" && !hatErfassenZugriff(state.session)) return; // Sicherheitsnetz, Button ist ohnehin ausgeblendet
       // Direkter Wechsel über die untere Navigation gilt als neuer "Wurzel"-Punkt - die
       // Verlaufstiefe wird zurückgesetzt, damit sich beim erneuten Öffnen tieferer Ansichten
