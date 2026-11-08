@@ -342,6 +342,7 @@ const state = {
   selectedId: null,
   search: "",
   losJahr: new Date().getFullYear(),
+  losBildT: 0,
   zustandFilter: "alle",
   bezirkFilter: "alle",
   userLoc: null,
@@ -1980,7 +1981,23 @@ function helferGefiltert() {
 }
 /* ---------- Bezirkslosung (nur App-Admin) ----------
    Es wird nichts gespeichert (Datenschutz): Jahr eintragen, QR-Codes und eine leere Papierliste drucken.
-   Die Namen werden ausschließlich auf Papier eingetragen. Die QR-Codes enthalten reinen Text, keinen Link. */
+   Die Namen werden ausschließlich auf Papier eingetragen. Der QR-Code öffnet beim Scannen die kleine eigene Seite
+   /los/ (nicht die App) mit dem hochgeladenen Bild und der Bezirkszahl. Das Bild liegt öffentlich im Bucket "bezirkslosung". */
+const losBildUrl = () => SUPABASE_URL + "/storage/v1/object/public/bezirkslosung/bild.jpg";
+function losBildVerkleinern(datei, maxSeite) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(datei), img = new Image();
+    img.onload = () => {
+      const f = Math.min(1, maxSeite / Math.max(img.width, img.height));
+      const c = document.createElement("canvas"); c.width = Math.round(img.width * f); c.height = Math.round(img.height * f);
+      c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(url);
+      c.toBlob((b) => (b ? resolve(b) : reject(new Error("Bild konnte nicht umgewandelt werden"))), "image/jpeg", 0.85);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("Bild konnte nicht gelesen werden")); };
+    img.src = url;
+  });
+}
 const LOS_EINHEIT = "LZ Kleve";
 function bezirkVergleich(a, b) { return String(a).localeCompare(String(b), "de", { numeric: true }); }
 function losBezirke() {
@@ -1992,14 +2009,25 @@ function renderLosung() {
   return `
     <button class="back-link" id="btn-los-back">‹ Zurück</button>
     <h2 style="font-weight:600;margin:0 0 4px;">🎟 Bezirkslosung ${esc(LOS_EINHEIT)}</h2>
-    <p style="font-size:12px;color:#6B7280;margin:0 0 18px;">Nur für den Administrator sichtbar. Es wird nichts gespeichert.</p>
+    <p style="font-size:12px;color:#6B7280;margin:0 0 18px;">Nur für den Administrator sichtbar. Namen werden nicht gespeichert.</p>
     <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;">
       <label for="los-jahr" style="font-weight:700;font-size:20px;">Jahr</label>
       <input type="number" id="los-jahr" value="${esc(state.losJahr)}" min="2000" max="2100" style="width:150px;font-size:26px;font-weight:700;text-align:center;padding:8px;" />
     </div>
+    <h3 style="font-size:14px;margin:0 0 8px;">Bild für die Anzeige beim Scannen</h3>
+    <div id="los-bild-box" style="background:#fff;border-radius:12px;padding:10px;margin-bottom:20px;box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+      <img id="los-bild-vorschau" src="${losBildUrl()}?t=${state.losBildT || 0}" alt="" style="width:100%;max-height:180px;object-fit:cover;border-radius:8px;display:block;" onerror="this.style.display='none';document.getElementById('los-bild-leer').style.display='block'" />
+      <p id="los-bild-leer" style="display:none;font-size:13px;color:#6B7280;margin:0;">Noch kein Bild hochgeladen.</p>
+      <input type="file" id="los-bild-file" accept="image/*" class="hidden" />
+      <div style="display:flex;gap:8px;margin-top:10px;">
+        <button type="button" id="btn-los-bild" class="btn btn-outline" style="flex:1;">📷 Bild hochladen</button>
+        <button type="button" id="btn-los-bild-weg" class="btn btn-ghost" style="flex:0 0 auto;">Entfernen</button>
+      </div>
+      <a href="/los/?b=24&j=${esc(state.losJahr)}" target="_blank" rel="noopener" style="display:inline-block;margin-top:8px;font-size:13px;">Vorschau der Anzeige öffnen</a>
+    </div>
     <button type="button" id="btn-los-qr-druck" class="btn btn-primary btn-full" ${n ? "" : "disabled"}>🖨 ${n} QR-Codes drucken</button>
     <button type="button" id="btn-los-liste-druck" class="btn btn-outline btn-full" style="margin-top:8px;" ${n ? "" : "disabled"}>🖨 Leere Liste für die Namen drucken</button>
-    <p style="font-size:11px;color:#9CA3AF;margin:10px 0 0;line-height:1.5;">Alle Bezirke von ${esc(LOS_EINHEIT)} werden automatisch übernommen. Auf den Karten steht kein Bezirk, erst der Scan zeigt ihn. Die Reihenfolge wird beim Drucken gemischt.</p>
+    <p style="font-size:11px;color:#9CA3AF;margin:10px 0 0;line-height:1.5;">Alle Bezirke von ${esc(LOS_EINHEIT)} werden automatisch übernommen. Auf den Karten steht kein Bezirk, erst der Scan öffnet die Anzeige mit der Zahl. Die Reihenfolge wird beim Drucken gemischt.</p>
   `;
 }
 function losDruck(html) {
@@ -2018,7 +2046,7 @@ function losQrDrucken() {
   for (let i = liste.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [liste[i], liste[j]] = [liste[j], liste[i]]; }
   const karten = liste.map((b) => `
     <div class="los-karte">
-      ${erzeugeQrMatrix(`${LOS_EINHEIT}, Bezirk ${b} (${jahr})`).svg(190)}
+      ${erzeugeQrMatrix(`${location.origin}/los/?b=${encodeURIComponent(b)}&j=${encodeURIComponent(jahr)}`).svg(190)}
       <div class="los-karte-einheit">Bezirkslosung ${esc(jahr)} · ${esc(LOS_EINHEIT)}</div>
     </div>`).join("");
   losDruck(`<div class="los-raster">${karten}</div>`);
@@ -2035,6 +2063,24 @@ function setupLosungHandlers() {
   $("los-jahr").addEventListener("change", (e) => {
     const j = parseInt(e.target.value, 10);
     if (j >= 2000 && j <= 2100) state.losJahr = j; else e.target.value = state.losJahr;
+  });
+  const bildFile = $("los-bild-file");
+  $("btn-los-bild").addEventListener("click", () => bildFile.click());
+  bildFile.addEventListener("change", async () => {
+    const f = bildFile.files[0]; bildFile.value = "";
+    if (!f) return;
+    try {
+      const blob = await losBildVerkleinern(f, 1600);
+      const { error } = await sb.storage.from("bezirkslosung").upload("bild.jpg", blob, { upsert: true, contentType: "image/jpeg", cacheControl: "60" });
+      if (error) throw error;
+      state.losBildT = Date.now(); showToast("Bild hochgeladen"); render();
+    } catch (e) { showToast("Hochladen nicht möglich: " + (e.message || e)); }
+  });
+  $("btn-los-bild-weg").addEventListener("click", async () => {
+    if (!confirm("Bild wirklich entfernen?")) return;
+    const { error } = await sb.storage.from("bezirkslosung").remove(["bild.jpg"]);
+    if (error) { showToast("Entfernen nicht möglich: " + (error.message || error)); return; }
+    state.losBildT = Date.now(); showToast("Bild entfernt"); render();
   });
   $("btn-los-qr-druck").addEventListener("click", losQrDrucken);
   $("btn-los-liste-druck").addEventListener("click", losListeDrucken);

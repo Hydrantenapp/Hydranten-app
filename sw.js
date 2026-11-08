@@ -1,5 +1,5 @@
 /* Hydranten Feuerwehr Kleve – © 2026 Simone Loosen, Feuerwehr Kleve. Alle Rechte vorbehalten. Siehe LICENSE. */
-const CACHE_NAME = "hydranten-app-v38";
+const CACHE_NAME = "hydranten-app-v39";
 const PRECACHE_URLS = [
   "./",
   "./index.html",
@@ -52,6 +52,8 @@ self.addEventListener("fetch", (event) => {
   if (new URL(event.request.url).hostname.endsWith(".supabase.co")) return;
   // Die getrennte Erfassungs-App (Unterordner /erfassung/) hat einen eigenen Service Worker und Cache
   if (new URL(event.request.url).pathname.includes("/erfassung/")) return;
+  // Die Anzeigeseite der Bezirkslosung (/los/) ist eine eigene Seite, nicht Teil der App
+  if (new URL(event.request.url).pathname.includes("/los/")) return;
 
   if (istAppShellDatei(event.request)) {
     // Netzwerk-zuerst für die App-Shell (index.html/app.js/styles.css/manifest.json): sorgt
