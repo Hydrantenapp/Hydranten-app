@@ -1720,18 +1720,6 @@ function renderDatenAppAdmin() {
       </div>
       <button id="btn-nachtrag" class="btn btn-outline btn-full">Nachtrag-Datei auswählen</button>
     </div>
-    <div class="card" style="box-shadow:none;border:1px solid #e5e7eb;">
-      <div style="display:flex;gap:12px;align-items:center;margin-bottom:12px;">
-        <div class="hydrant-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
-        <div>
-          <div style="font-weight:600;font-size:14px;">Nachträge der Helfer</div>
-          <div style="font-size:12px;color:#6b7280;">Holt alle neu erfassten Positionen und Nennweiten vom Server. Es werden nur leere Felder ergänzt, Abweichungen werden extra abgefragt.</div>
-        </div>
-      </div>
-      <button id="btn-helfer-nachtrag" class="btn btn-outline btn-full">Offene Nachträge abholen</button>
-      <button id="btn-erfassung-link" class="btn btn-outline btn-full" style="margin-top:8px;">Link zur Erfassungs-App teilen</button>
-      <div style="font-size:11px;color:#9CA3AF;margin-top:6px;line-height:1.4;">Das Helfer-Passwort wird nicht mitgesendet. Gib es den Helfern separat weiter.</div>
-    </div>
   `;
 
   const funktionenInhalt = `
@@ -1796,6 +1784,20 @@ function renderDatenAppAdmin() {
     <h2 style="font-weight:600;margin:0 0 4px;">Daten verwalten</h2>
     <p style="font-size:13px;color:#6b7280;margin:0 0 16px;">${state.hydranten.length} Hydranten lokal gespeichert. Abschnitt antippen zum Auf-/Zuklappen.</p>
 
+    <div style="margin-bottom:12px;">
+    <div class="card" style="box-shadow:none;border:1px solid #e5e7eb;">
+      <div style="display:flex;gap:12px;align-items:center;margin-bottom:12px;">
+        <div class="hydrant-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
+        <div>
+          <div style="font-weight:600;font-size:14px;">Nachträge der Helfer</div>
+          <div style="font-size:12px;color:#6b7280;">Holt alle neu erfassten Positionen und Nennweiten vom Server. Es werden nur leere Felder ergänzt, Abweichungen werden extra abgefragt.</div>
+        </div>
+      </div>
+      <button id="btn-helfer-nachtrag" class="btn btn-outline btn-full">Offene Nachträge abholen</button>
+      <button id="btn-erfassung-link" class="btn btn-outline btn-full" style="margin-top:8px;">Link zur Erfassungs-App teilen</button>
+      <div style="font-size:11px;color:#9CA3AF;margin-top:6px;line-height:1.4;">Das Helfer-Passwort wird nicht mitgesendet. Gib es den Helfern separat weiter.</div>
+    </div>
+    </div>
     ${statistikAbschnittHTML("adminDaten", "📁 Daten", null, datenInhalt)}
     ${statistikAbschnittHTML("adminFunktionen", "⚙️ Funktionen", null, funktionenInhalt)}
 
