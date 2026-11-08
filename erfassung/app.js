@@ -257,7 +257,7 @@ function renderErfassen() {
 
     <div class="card">
       <h3>Position</h3>
-      <p class="note">Am Hydranten stehen, oben die Messung starten und warten, bis die Genauigkeit gut ist (am besten unter 10 m). „Position übernehmen“ nimmt den besten gemessenen Wert, den Pin kannst du danach noch verschieben.</p>
+      <p class="note">Entweder die Karte antippen bzw. den Pin ziehen und „Position übernehmen“ tippen, oder am Hydranten die Messung starten (am besten unter 10 m Genauigkeit). Nach „Messung beenden“ lässt sich der Pin noch verschieben.</p>
       <div class="row">
         <div style="flex:1"><label class="lbl">Breitengrad</label><input type="text" id="e-lat" inputmode="decimal" value="${c.lat ?? ""}" placeholder="51.78…" /></div>
         <div style="flex:1"><label class="lbl">Längengrad</label><input type="text" id="e-lng" inputmode="decimal" value="${c.lng ?? ""}" placeholder="6.13…" /></div>
@@ -294,7 +294,8 @@ function bindView() {
   } else if (state.view === "erfassen") {
     $("btn-zurueck").onclick = zurueck;
     $("btn-geo").onclick = () => (state.geo.watchId !== null ? stoppeMessung() : starteMessung());
-    $("btn-geo-take").onclick = uebernehmen;
+    $("btn-geo-take").onclick = () => uebernehmenKlick();
+    aktualisiereButtons();
     $("btn-speichern").onclick = speichern;
     const v = $("btn-verwerfen"); if (v) v.onclick = verwerfen;
     ["e-lat", "e-lng"].forEach((id) => ($(id).oninput = () => {
@@ -355,7 +356,22 @@ function starteMessung() {
   render();
 }
 function stoppeMessung() {
-  if (state.geo.watchId !== null) { navigator.geolocation.clearWatch(state.geo.watchId); state.geo.watchId = null; }
+  if (state.geo.watchId !== null) { navigator.geolocation.clearWatch(state.geo.watchId); state.geo.watchId = null; aktualisiereButtons(); }
+}
+/* Knöpfe unter der Karte: während der Messung "Messung beenden" + bester GPS-Wert; sonst Pin-Position übernehmen */
+function aktualisiereButtons() {
+  const messung = state.geo.watchId !== null;
+  const bg = document.getElementById("btn-geo"), bt = document.getElementById("btn-geo-take");
+  if (bg) { bg.textContent = messung ? "Messung beenden" : "📍 Messung starten"; bg.classList.toggle("btn-danger", messung); bg.classList.toggle("btn-primary", !messung); }
+  if (bt) bt.disabled = messung ? !state.geo.best : !pin;
+}
+/* "Position übernehmen": ohne laufende Messung gilt der gesetzte Pin, während der Messung der beste GPS-Wert */
+function uebernehmenKlick() {
+  if (state.geo.watchId !== null) { uebernehmen(false); return; }
+  if (!pin) { showToast("Erst die Karte antippen, um den Pin zu setzen"); return; }
+  const p = pin.getLatLng();
+  setzePin(p.lat, p.lng, true);
+  showToast("Position des Pins übernommen");
 }
 function aktualisiereGeo() {
   const g = state.geo;
@@ -363,7 +379,7 @@ function aktualisiereGeo() {
   if (!el) return;
   el.textContent = g.last ? `Aktuell ±${Math.round(g.last.acc)} m · Beste ±${Math.round(g.best.acc)} m` : (g.fehler || "Warte auf GPS-Signal…");
   const take = document.getElementById("btn-geo-take");
-  if (take) take.disabled = !g.best;
+  aktualisiereButtons();
   zeigeGpsAufKarte();
 }
 function uebernehmen(leise) {
@@ -428,6 +444,7 @@ function setzePin(lat, lng, manuell) {
       });
     } else pin.setLatLng([lat, lng]);
   }
+  aktualisiereButtons();
   if (manuell) {
     const c = state.cur;
     c.lat = +lat.toFixed(7); c.lng = +lng.toFixed(7); c.acc = null; c.zeit = new Date().toISOString();
