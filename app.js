@@ -2676,6 +2676,7 @@ function attachHandlers() {
       if (state.session !== "App-Admin") return;
       navVor();
       state.tab = "los";
+      state.losBildT = Date.now();
       render();
     });
     const btnKonten = document.getElementById("btn-konten-oeffnen");

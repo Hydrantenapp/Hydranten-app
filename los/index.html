@@ -33,7 +33,7 @@
     // Bild des Administrators (öffentlich abrufbar), falls vorhanden
     var base = "https://icepfjtifsdbefrgilan.supabase.co/storage/v1/object/public/bezirkslosung/bild.";
     function laden(ext) {
-      var url = base + ext, img = new Image();
+      var url = base + ext + "?t=" + Date.now(), img = new Image(); // immer frisch laden, nie ein altes Bild aus dem Zwischenspeicher
       img.onload = function () { document.getElementById("bg").style.backgroundImage = "url('" + url + "')"; };
       img.onerror = function () { if (ext === "png") laden("jpg"); };
       img.src = url;
