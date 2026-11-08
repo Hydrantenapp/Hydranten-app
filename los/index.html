@@ -7,31 +7,28 @@
 <title>Bezirkslosung</title>
 <style>
   html, body { margin: 0; height: 100%; }
-  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: #12151b; color: #fff; }
-  .seite { height: 100%; min-height: 100vh; display: flex; flex-direction: column; }
-  /* Bild komplett sichtbar (verkleinert, nichts wird abgeschnitten); unscharfe Kopie füllt den Rand */
-  .bildflaeche { position: relative; flex: 1 1 52%; min-height: 0; overflow: hidden; background: #12151b; }
-  .bildflaeche .unscharf { position: absolute; inset: -20px; background: center / cover no-repeat; filter: blur(22px) brightness(.55); }
-  .bildflaeche .bild { position: absolute; inset: 14px; background: center / contain no-repeat; filter: drop-shadow(0 6px 18px rgba(0,0,0,.5)); }
-  .tafel { flex: 0 0 auto; text-align: center; padding: 14px 16px calc(18px + env(safe-area-inset-bottom, 0)); background: linear-gradient(#b3261e, #7e1812); border-top: 6px solid #fff; box-shadow: 0 -8px 24px rgba(0,0,0,.45); }
-  .label { font-size: clamp(16px, 4.6vw, 26px); font-weight: 700; letter-spacing: .28em; text-transform: uppercase; opacity: .95; }
-  .zahl { font-size: clamp(96px, 30vh, 300px); line-height: 1; font-weight: 900; font-variant-numeric: tabular-nums; margin: 2px 0 4px; text-shadow: 0 3px 0 rgba(0,0,0,.35); }
-  .zeile { font-size: clamp(14px, 4vw, 22px); font-weight: 600; opacity: .95; }
-  @media (orientation: landscape) and (max-height: 520px) {
-    .seite { flex-direction: row; }
-    .tafel { flex: 0 0 42%; display: flex; flex-direction: column; justify-content: center; border-top: 0; border-left: 6px solid #fff; padding: 12px; }
-    .zahl { font-size: clamp(80px, 52vh, 260px); }
-  }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: #12151b; color: #fff; overflow: hidden; }
+  /* Ein Bild über die ganze Seite: unscharfe Kopie füllt alles, das Bild selbst liegt vollständig und verkleinert darüber */
+  .unscharf { position: fixed; inset: -30px; background: center / cover no-repeat; filter: blur(26px) brightness(.6); }
+  .bild { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); display: none;
+          -webkit-mask-image: linear-gradient(to right, transparent, #000 14%, #000 86%, transparent), linear-gradient(to bottom, transparent, #000 14%, #000 86%, transparent);
+          -webkit-mask-composite: source-in; mask-image: linear-gradient(to right, transparent, #000 14%, #000 86%, transparent), linear-gradient(to bottom, transparent, #000 14%, #000 86%, transparent); mask-composite: intersect; }
+  .text { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 16px; box-sizing: border-box;
+          background: radial-gradient(ellipse at center, rgba(0,0,0,.42) 0%, rgba(0,0,0,.18) 45%, rgba(0,0,0,0) 72%); }
+  .label { font-size: clamp(20px, 6vw, 34px); font-weight: 800; letter-spacing: .3em; text-transform: uppercase; padding-left: .3em; text-shadow: 0 2px 10px rgba(0,0,0,.85); }
+  .zahl { font-size: clamp(110px, 40vmin, 340px); line-height: 1; font-weight: 900; font-variant-numeric: tabular-nums; margin: 0;
+          color: #fff; -webkit-text-stroke: clamp(3px, .9vmin, 8px) rgba(150,20,14,.9); paint-order: stroke fill;
+          text-shadow: 0 6px 28px rgba(0,0,0,.8), 0 0 6px rgba(0,0,0,.7); }
+  .zeile { font-size: clamp(16px, 5vw, 28px); font-weight: 700; text-shadow: 0 2px 10px rgba(0,0,0,.9); }
 </style>
 </head>
 <body>
-<div class="seite">
-  <div class="bildflaeche" id="bildflaeche"><div class="unscharf" id="unscharf"></div><div class="bild" id="bild"></div></div>
-  <div class="tafel">
-    <div class="label">Bezirk</div>
-    <div class="zahl" id="zahl">–</div>
-    <div class="zeile" id="zeile"></div>
-  </div>
+<div class="unscharf" id="unscharf"></div>
+<img class="bild" id="bild" alt="" />
+<div class="text">
+  <div class="label">Bezirk</div>
+  <div class="zahl" id="zahl">–</div>
+  <div class="zeile" id="zeile"></div>
 </div>
 <script>
   (function () {
@@ -43,11 +40,17 @@
     // Bild des Administrators (öffentlich abrufbar), falls vorhanden; sonst nimmt die Zahl den ganzen Platz
     var url = "https://icepfjtifsdbefrgilan.supabase.co/storage/v1/object/public/bezirkslosung/bild.jpg";
     var img = new Image();
+    function anpassen() {
+      var el = document.getElementById("bild"); if (!el.naturalWidth) return;
+      var f = Math.min(window.innerWidth / el.naturalWidth, window.innerHeight / el.naturalHeight);
+      el.style.width = Math.round(el.naturalWidth * f) + "px"; el.style.height = Math.round(el.naturalHeight * f) + "px";
+    }
     img.onload = function () {
-      document.getElementById("bild").style.backgroundImage = "url('" + url + "')";
+      var el = document.getElementById("bild"); el.src = url; el.style.display = "block";
+      el.onload = anpassen; anpassen();
       document.getElementById("unscharf").style.backgroundImage = "url('" + url + "')";
     };
-    img.onerror = function () { document.getElementById("bildflaeche").style.display = "none"; document.querySelector(".tafel").style.flex = "1 1 auto"; document.querySelector(".tafel").style.justifyContent = "center"; document.querySelector(".tafel").style.display = "flex"; document.querySelector(".tafel").style.flexDirection = "column"; };
+    window.addEventListener("resize", anpassen);
     img.src = url;
   })();
 </script>
