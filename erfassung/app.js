@@ -301,9 +301,10 @@ function bindView() {
     ["e-lat", "e-lng"].forEach((id) => ($(id).oninput = () => {
       state.cur.zeit = null; state.cur.acc = null; $("e-pos-info").textContent = "";
       const la = parseZahl($("e-lat").value), ln = parseZahl($("e-lng").value);
-      if (la !== null && ln !== null && Math.abs(la) <= 90 && Math.abs(ln) <= 180) setzePin(la, ln, false);
+      if (la !== null && ln !== null && Math.abs(la) <= 90 && Math.abs(ln) <= 180) { state.cur.lat = la; state.cur.lng = ln; setzePin(la, ln, false); }
     }));
-    $("e-nw").oninput = pruefeNw;
+    // Eingaben sofort merken, damit sie ein Neuzeichnen (z.B. beim Start der Messung) überstehen
+    $("e-nw").oninput = () => { state.cur.nennweite = nennweiteNorm($("e-nw").value); pruefeNw(); };
     baueKarte();
   }
 }
