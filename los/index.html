@@ -8,11 +8,12 @@
 <style>
   html, body { margin: 0; height: 100%; }
   body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: #1b1f27; color: #fff; }
-  #bg { position: fixed; inset: 0; background: center / contain no-repeat; }
+  #bg { position: fixed; left: 0; right: 0; top: 0; bottom: 32%; background: center / contain no-repeat;
+        -webkit-mask-image: linear-gradient(to bottom, #000 86%, transparent 100%); mask-image: linear-gradient(to bottom, #000 86%, transparent 100%); }
   #bg::after { content: ""; position: absolute; inset: 0; background: radial-gradient(circle at center, rgba(0,0,0,.18) 0%, rgba(0,0,0,0) 70%); }
-  main { position: relative; min-height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 24px; box-sizing: border-box; }
+  main { position: relative; min-height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; text-align: center; padding: 16px 16px calc(3vh + env(safe-area-inset-bottom, 0)); box-sizing: border-box; }
   .label { font-size: clamp(18px, 5vw, 32px); font-weight: 700; letter-spacing: .12em; text-transform: uppercase; text-shadow: 0 2px 10px rgba(0,0,0,.8); }
-  .zahl { font-size: clamp(80px, 28vmin, 240px); line-height: 1; font-weight: 900; font-variant-numeric: tabular-nums; text-shadow: 0 4px 24px rgba(0,0,0,.85), 0 0 4px rgba(0,0,0,.9); margin: 4px 0; }
+  .zahl { font-size: clamp(90px, 34vmin, 280px); line-height: 1; font-weight: 900; font-variant-numeric: tabular-nums; text-shadow: 0 4px 24px rgba(0,0,0,.85), 0 0 4px rgba(0,0,0,.9); margin: 4px 0; }
   .zeile { font-size: clamp(16px, 5vw, 26px); font-weight: 600; text-shadow: 0 2px 8px rgba(0,0,0,.85); }
 </style>
 </head>
@@ -66,7 +67,7 @@
         }
         if (x1 < 0) return;
         var sx = W / cw, sy = H / ch, bx = x0 * sx, by = y0 * sy, bw = (x1 - x0 + 1) * sx, bh = (y1 - y0 + 1) * sy;
-        var vw = window.innerWidth, vh = window.innerHeight;
+        var bgEl = document.getElementById("bg"), vw = bgEl.clientWidth, vh = bgEl.clientHeight;
         var s = Math.min(vw * 0.96 / bw, vh * 0.96 / bh), fit = Math.min(vw / W, vh / H);
         if (s <= fit * 1.02) return;
         var px = vw / 2 - (bx + bw / 2) * s, py = vh / 2 - (by + bh / 2) * s;
