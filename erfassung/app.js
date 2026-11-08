@@ -277,14 +277,12 @@ function renderErfassen() {
       <div class="geo-live" id="geo-live">${live}</div>
     </div>
 
-    <div class="card">
-      <h3>Position</h3>
-      <div class="row">
-        <div style="flex:1"><label class="lbl">Breitengrad</label><input type="text" id="e-lat" inputmode="decimal" value="${c.lat ?? ""}" placeholder="51.78…" /></div>
-        <div style="flex:1"><label class="lbl">Längengrad</label><input type="text" id="e-lng" inputmode="decimal" value="${c.lng ?? ""}" placeholder="6.13…" /></div>
-      </div>
-      <p class="note" id="e-pos-info">${c.zeit && Number.isFinite(c.acc) ? `Übernommen ${fmtZeit(c.zeit)}, Genauigkeit ±${Math.round(c.acc)} m.` : (c.zeit ? `Per Pin gesetzt ${fmtZeit(c.zeit)}.` : "")}</p>
+    <div class="pos-zeile">
+      <span class="pos-label">📍 Position</span>
+      <input type="text" id="e-lat" readonly tabindex="-1" value="${c.lat ?? ""}" placeholder="Breite" aria-label="Breitengrad" />
+      <input type="text" id="e-lng" readonly tabindex="-1" value="${c.lng ?? ""}" placeholder="Länge" aria-label="Längengrad" />
     </div>
+    <p class="note pos-info" id="e-pos-info">${c.zeit && Number.isFinite(c.acc) ? `Übernommen ${fmtZeit(c.zeit)}, Genauigkeit ±${Math.round(c.acc)} m.` : (c.zeit ? `Per Pin gesetzt ${fmtZeit(c.zeit)}.` : "")}</p>
 
     <button class="btn btn-primary" id="btn-speichern" ${nwPflicht(c) && !c.nennweite ? "disabled" : ""}>Speichern</button>
     ${c.gespeichert && !c.gesendet ? `<button class="btn btn-danger" id="btn-verwerfen">Erfassung verwerfen</button>` : ""}
@@ -313,11 +311,6 @@ function bindView() {
     aktualisiereButtons();
     $("btn-speichern").onclick = speichern;
     const v = $("btn-verwerfen"); if (v) v.onclick = verwerfen;
-    ["e-lat", "e-lng"].forEach((id) => ($(id).oninput = () => {
-      state.cur.zeit = null; state.cur.acc = null; $("e-pos-info").textContent = "";
-      const la = parseZahl($("e-lat").value), ln = parseZahl($("e-lng").value);
-      if (la !== null && ln !== null && Math.abs(la) <= 90 && Math.abs(ln) <= 180) { state.cur.lat = la; state.cur.lng = ln; setzePin(la, ln, false); }
-    }));
     // Eingaben sofort merken, damit sie ein Neuzeichnen (z.B. beim Start der Messung) überstehen
     $("e-nw").oninput = () => { state.cur.nennweite = nennweiteNorm($("e-nw").value); pruefeNw(); };
     baueKarte();

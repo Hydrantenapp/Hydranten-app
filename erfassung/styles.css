@@ -66,3 +66,9 @@ select, input[type=text], input[type=search] { max-width: 100%; min-width: 0; }
 .faq[open] { background:#fff; border-radius:12px; padding:8px 12px 10px; box-shadow:0 1px 3px rgba(0,0,0,.08); }
 .faq dt { font-weight:700; margin-top:8px; }
 .faq dd { margin:2px 0 0; color:var(--muted); line-height:1.45; }
+
+.pos-zeile { display:flex; align-items:center; gap:6px; margin:0 0 2px; }
+.pos-label { font-size:13px; font-weight:700; color:var(--brand); white-space:nowrap; }
+.pos-zeile input { flex:1 1 0; padding:6px 8px; font-size:13px; font-family:ui-monospace,Menlo,Consolas,monospace; background:#eef0f2; color:#374151; border-radius:8px; }
+.pos-info { margin:2px 0 12px; min-height:0; }
+.pos-info:empty { display:none; }
