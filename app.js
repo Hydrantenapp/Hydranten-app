@@ -1983,26 +1983,29 @@ function helferGefiltert() {
    Es wird nichts gespeichert (Datenschutz): Jahr eintragen, QR-Codes und eine leere Papierliste drucken.
    Die Namen werden ausschließlich auf Papier eingetragen. Der QR-Code öffnet beim Scannen die kleine eigene Seite
    /los/ (nicht die App) mit dem hochgeladenen Bild und der Bezirkszahl. Das Bild liegt öffentlich im Bucket "bezirkslosung". */
-const losBildUrl = () => SUPABASE_URL + "/storage/v1/object/public/bezirkslosung/bild.jpg";
+const losBildUrl = (ext) => SUPABASE_URL + "/storage/v1/object/public/bezirkslosung/bild." + (ext || "jpg");
+/* Bild verkleinern. Hat es transparente Stellen (z. B. ein Logo), bleibt es als PNG erhalten - sonst würde
+   die Umwandlung in JPEG die Transparenz schwarz machen. Fotos werden als JPEG gespeichert. */
 function losBildVerkleinern(datei, maxSeite) {
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(datei), img = new Image();
     img.onload = () => {
       const f = Math.min(1, maxSeite / Math.max(img.width, img.height));
-      const c = document.createElement("canvas"); c.width = Math.round(img.width * f); c.height = Math.round(img.height * f);
-      c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+      const c = document.createElement("canvas"); c.width = Math.max(1, Math.round(img.width * f)); c.height = Math.max(1, Math.round(img.height * f));
+      const ctx = c.getContext("2d");
+      ctx.drawImage(img, 0, 0, c.width, c.height);
       URL.revokeObjectURL(url);
-      c.toBlob((b) => (b ? resolve(b) : reject(new Error("Bild konnte nicht umgewandelt werden"))), "image/jpeg", 0.85);
+      let transparent = false;
+      try {
+        const d = ctx.getImageData(0, 0, c.width, c.height).data;
+        for (let i = 3; i < d.length; i += 4 * 97) if (d[i] < 250) { transparent = true; break; }
+      } catch (e) {}
+      const ext = transparent ? "png" : "jpg";
+      c.toBlob((b) => (b ? resolve({ blob: b, ext }) : reject(new Error("Bild konnte nicht umgewandelt werden"))), transparent ? "image/png" : "image/jpeg", 0.88);
     };
-    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("Bild konnte nicht gelesen werden")); };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("Bild konnte nicht gelesen werden (Format?)")); };
     img.src = url;
   });
-}
-const LOS_EINHEIT = "LZ Kleve";
-function bezirkVergleich(a, b) { return String(a).localeCompare(String(b), "de", { numeric: true }); }
-function losBezirke() {
-  const set = new Set(state.hydranten.filter((h) => h.einheit === LOS_EINHEIT).map((h) => (h.bezirk || "").trim()).filter((b) => /^\d+$/.test(b)));
-  return Array.from(set).sort(bezirkVergleich);
 }
 function renderLosung() {
   const n = losBezirke().length;
@@ -2016,7 +2019,7 @@ function renderLosung() {
     </div>
     <h3 style="font-size:14px;margin:0 0 8px;">Bild für die Anzeige beim Scannen</h3>
     <div id="los-bild-box" style="background:#fff;border-radius:12px;padding:10px;margin-bottom:20px;box-shadow:0 1px 3px rgba(0,0,0,0.05);">
-      <img id="los-bild-vorschau" src="${losBildUrl()}?t=${state.losBildT || 0}" alt="" style="width:100%;max-height:180px;object-fit:cover;border-radius:8px;display:block;" onerror="this.style.display='none';document.getElementById('los-bild-leer').style.display='block'" />
+      <img id="los-bild-vorschau" src="${losBildUrl("png")}?t=${state.losBildT || 0}" alt="" style="width:100%;max-height:180px;object-fit:contain;background:#1b1f27;border-radius:8px;display:block;" onerror="if(!this.dataset.jpg){this.dataset.jpg=1;this.src='${losBildUrl("jpg")}?t=${state.losBildT || 0}';}else{this.style.display='none';document.getElementById('los-bild-leer').style.display='block';}" />
       <p id="los-bild-leer" style="display:none;font-size:13px;color:#6B7280;margin:0;">Noch kein Bild hochgeladen.</p>
       <input type="file" id="los-bild-file" accept="image/*" class="hidden" />
       <div style="display:flex;gap:8px;margin-top:10px;">
@@ -2070,15 +2073,16 @@ function setupLosungHandlers() {
     const f = bildFile.files[0]; bildFile.value = "";
     if (!f) return;
     try {
-      const blob = await losBildVerkleinern(f, 1600);
-      const { error } = await sb.storage.from("bezirkslosung").upload("bild.jpg", blob, { upsert: true, contentType: "image/jpeg", cacheControl: "60" });
+      const { blob, ext } = await losBildVerkleinern(f, 1600);
+      const { error } = await sb.storage.from("bezirkslosung").upload("bild." + ext, blob, { upsert: true, contentType: ext === "png" ? "image/png" : "image/jpeg", cacheControl: "60" });
       if (error) throw error;
+      await sb.storage.from("bezirkslosung").remove(["bild." + (ext === "png" ? "jpg" : "png")]);
       state.losBildT = Date.now(); showToast("Bild hochgeladen"); render();
     } catch (e) { showToast("Hochladen nicht möglich: " + (e.message || e)); }
   });
   $("btn-los-bild-weg").addEventListener("click", async () => {
     if (!confirm("Bild wirklich entfernen?")) return;
-    const { error } = await sb.storage.from("bezirkslosung").remove(["bild.jpg"]);
+    const { error } = await sb.storage.from("bezirkslosung").remove(["bild.jpg", "bild.png"]);
     if (error) { showToast("Entfernen nicht möglich: " + (error.message || error)); return; }
     state.losBildT = Date.now(); showToast("Bild entfernt"); render();
   });
