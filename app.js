@@ -2007,6 +2007,12 @@ function losBildVerkleinern(datei, maxSeite) {
     img.src = url;
   });
 }
+const LOS_EINHEIT = "LZ Kleve";
+function bezirkVergleich(a, b) { return String(a).localeCompare(String(b), "de", { numeric: true }); }
+function losBezirke() {
+  const set = new Set(state.hydranten.filter((h) => h.einheit === LOS_EINHEIT).map((h) => (h.bezirk || "").trim()).filter((b) => /^\d+$/.test(b)));
+  return Array.from(set).sort(bezirkVergleich);
+}
 function renderLosung() {
   const n = losBezirke().length;
   return `
