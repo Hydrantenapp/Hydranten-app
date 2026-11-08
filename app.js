@@ -799,16 +799,44 @@ function vergleicheStrasseHausnummer(a, b) {
   return pa.hausnr.localeCompare(pb.hausnr, "de", { numeric: true });
 }
 
+/* ---------- Suche mit Toleranz für kleine Tippfehler (nur bei Straßennamen, nicht bei Zahlen) ---------- */
+function sucheNorm(t) {
+  return String(t || "").toLowerCase().replace(/ß/g, "ss").normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/stra(?:ss|s)e\b|str\./g, "str");
+}
+function editDistanz(a, b, max) {
+  if (Math.abs(a.length - b.length) > max) return max + 1;
+  let prev = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    const cur = [i];
+    let min = i;
+    for (let j = 1; j <= b.length; j++) {
+      cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+      if (cur[j] < min) min = cur[j];
+    }
+    if (min > max) return max + 1;
+    prev = cur;
+  }
+  return prev[b.length];
+}
+function passtZurSuche(h, q) {
+  const felder = [h.name, h.lage, h.nrAlt, h.nrNeu, h.durchfluss].map(sucheNorm);
+  const gesamt = felder.join(" | ");
+  const woerter = sucheNorm(h.name + " " + (h.lage || "")).split(/[^a-z0-9]+/).filter(Boolean);
+  return sucheNorm(q).split(/\s+/).filter(Boolean).every((tok) => {
+    if (gesamt.includes(tok)) return true;
+    if (/\d/.test(tok)) return false; // Zahlen und Nummern müssen genau passen
+    const max = tok.length >= 7 ? 2 : tok.length >= 4 ? 1 : 0;
+    if (!max) return false;
+    // ganzes Wort oder (bei noch unvollständiger Eingabe) Wortanfang gleicher Länge
+    return woerter.some((w) => editDistanz(tok, w, max) <= max || (w.length > tok.length && editDistanz(tok, w.slice(0, tok.length), max) <= max));
+  });
+}
+
 function filteredList(ohneBezirk) {
   const q = state.search.trim().toLowerCase();
   let list = state.hydranten;
-  if (q) list = list.filter((h) =>
-    h.name.toLowerCase().includes(q) ||
-    (h.lage || "").toLowerCase().includes(q) ||
-    (h.nrAlt || "").toLowerCase().includes(q) ||
-    (h.nrNeu || "").toLowerCase().includes(q) ||
-    (h.durchfluss || "").toLowerCase().includes(q)
-  );
+  if (q) list = list.filter((h) => passtZurSuche(h, q));
   if (state.zustandFilter !== "alle") list = list.filter((h) => h.zustand === state.zustandFilter);
   if (!ohneBezirk && state.bezirkFilter !== "alle") list = list.filter((h) => (h.bezirk || "") === state.bezirkFilter);
   return withDistance(list);
