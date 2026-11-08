@@ -7,7 +7,7 @@
 <title>Bezirkslosung</title>
 <style>
   html, body { margin: 0; height: 100%; }
-  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: #000; color: #fff; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: #1b1f27; color: #fff; }
   #bg { position: fixed; inset: 0; background: center / contain no-repeat; }
   #bg::after { content: ""; position: absolute; inset: 0; background: radial-gradient(circle at center, rgba(0,0,0,.18) 0%, rgba(0,0,0,0) 70%); }
   main { position: relative; min-height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 24px; box-sizing: border-box; }
@@ -32,10 +32,26 @@
     document.getElementById("zeile").textContent = "LZ Kleve" + (j ? " · " + j : "");
     // Bild des Administrators (öffentlich abrufbar), falls vorhanden
     var base = "https://icepfjtifsdbefrgilan.supabase.co/storage/v1/object/public/bezirkslosung/bild.";
-    function laden(ext) {
+    // Hintergrundfarbe aus dem Bildrand ermitteln, damit das Bild nahtlos in die Seite übergeht.
+    // Transparente Bilder (z. B. Logos als PNG) bekommen ein dunkles Grau.
+    function randfarbe(img) {
+      try {
+        var c = document.createElement("canvas"); c.width = 24; c.height = 24;
+        var x = c.getContext("2d"); x.drawImage(img, 0, 0, 24, 24);
+        var d = x.getImageData(0, 0, 24, 24).data, r = 0, g = 0, bl = 0, a = 0, n = 0;
+        for (var i = 0; i < 24; i++) for (var k = 0; k < 24; k++) {
+          if (i > 1 && i < 22 && k > 1 && k < 22) continue;
+          var o = (i * 24 + k) * 4; r += d[o]; g += d[o + 1]; bl += d[o + 2]; a += d[o + 3]; n++;
+        }
+        if (a / n < 128) { document.body.style.background = "#1b1f27"; return; }
+        document.body.style.background = "rgb(" + Math.round(r / n) + "," + Math.round(g / n) + "," + Math.round(bl / n) + ")";
+      } catch (e) { document.body.style.background = "#1b1f27"; }
+    }
+    function laden(ext, ohneCors) {
       var url = base + ext + "?t=" + Date.now(), img = new Image(); // immer frisch laden, nie ein altes Bild aus dem Zwischenspeicher
-      img.onload = function () { document.getElementById("bg").style.backgroundImage = "url('" + url + "')"; };
-      img.onerror = function () { if (ext === "png") laden("jpg"); };
+      if (!ohneCors) img.crossOrigin = "anonymous";
+      img.onload = function () { document.getElementById("bg").style.backgroundImage = "url('" + url + "')"; if (!ohneCors) randfarbe(img); };
+      img.onerror = function () { if (!ohneCors) laden(ext, true); else if (ext === "png") laden("jpg"); };
       img.src = url;
     }
     laden("png");
