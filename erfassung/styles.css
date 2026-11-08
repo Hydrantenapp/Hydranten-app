@@ -59,3 +59,10 @@ html, body { max-width: 100%; overflow-x: hidden; }
 .row > select, .row > div { flex: 1 1 0; }
 .item, .item-name, .item-sub, .note, .warn { overflow-wrap: anywhere; }
 select, input[type=text], input[type=search] { max-width: 100%; min-width: 0; }
+
+.faq { margin:0 0 10px; font-size:13px; }
+.faq summary { cursor:pointer; color:var(--brand); font-weight:600; padding:4px 0; list-style:none; }
+.faq summary::-webkit-details-marker { display:none; }
+.faq[open] { background:#fff; border-radius:12px; padding:8px 12px 10px; box-shadow:0 1px 3px rgba(0,0,0,.08); }
+.faq dt { font-weight:700; margin-top:8px; }
+.faq dd { margin:2px 0 0; color:var(--muted); line-height:1.45; }

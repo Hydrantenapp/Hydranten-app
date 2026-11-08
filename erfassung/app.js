@@ -243,6 +243,23 @@ function renderErfassen() {
     <h2>${esc(c.name)}</h2>
     <p class="sub">${nr}${alt}${ort ? " · " + ort : ""}</p>
     ${vorhanden}${nwVorhanden}
+    <details class="faq">
+      <summary>❓ Hilfe</summary>
+      <dl>
+        <dt>Wie erfasse ich die Position?</dt>
+        <dd>Karte antippen oder den Pin ziehen, dann „Position übernehmen“. Oder am Hydranten stehen und „Messung starten“.</dd>
+        <dt>Was passiert bei der Messung?</dt>
+        <dd>Der Pin springt automatisch auf den besten GPS-Wert. Am besten warten, bis die Genauigkeit unter 10 m liegt. Der blaue Kreis zeigt, wo das GPS dich vermutet.</dd>
+        <dt>Kann ich den Pin danach noch verschieben?</dt>
+        <dd>Ja, nach „Messung beenden“ per Tippen oder Ziehen. „Position übernehmen“ nimmt dann den Pin.</dd>
+        <dt>Warum ist Speichern gesperrt?</dt>
+        <dd>Die Nennweite ist Pflicht, solange sie in der Hauptapp noch fehlt.</dd>
+        <dt>Wann werden die Daten gesendet?</dt>
+        <dd>Beim Speichern und bei „Jetzt abgleichen“ auf der Startseite, sobald Netz da ist. Ohne Netz wird später gesendet.</dd>
+        <dt>Wie korrigiere ich einen Eintrag?</dt>
+        <dd>Hydranten erneut öffnen, neue Werte eintragen und speichern.</dd>
+      </dl>
+    </details>
 
     <div class="card">
       <h3>Nennweite</h3>
@@ -252,7 +269,6 @@ function renderErfassen() {
 
     <div class="card">
       <h3>Karte</h3>
-      <p class="note">Während der Messung springt der Pin automatisch auf die beste GPS-Position. Nach „Messung beenden“ kannst du die Karte antippen oder den Pin ziehen, um ihn genau auf den Hydranten zu setzen. Der blaue Kreis zeigt, wo das GPS dich vermutet.</p>
       <div id="karte"></div>
       <div class="row">
         <button class="btn ${messung ? "btn-danger" : "btn-primary"}" id="btn-geo">${messung ? "Messung beenden" : "📍 Messung starten"}</button>
@@ -263,7 +279,6 @@ function renderErfassen() {
 
     <div class="card">
       <h3>Position</h3>
-      <p class="note">Entweder die Karte antippen bzw. den Pin ziehen und „Position übernehmen“ tippen, oder am Hydranten die Messung starten (am besten unter 10 m Genauigkeit). Nach „Messung beenden“ lässt sich der Pin noch verschieben.</p>
       <div class="row">
         <div style="flex:1"><label class="lbl">Breitengrad</label><input type="text" id="e-lat" inputmode="decimal" value="${c.lat ?? ""}" placeholder="51.78…" /></div>
         <div style="flex:1"><label class="lbl">Längengrad</label><input type="text" id="e-lng" inputmode="decimal" value="${c.lng ?? ""}" placeholder="6.13…" /></div>
