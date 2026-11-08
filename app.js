@@ -1488,6 +1488,7 @@ function renderForm(h) {
   const stammdatenLocked = !canEditStammdaten(state.session);
   const lockedAttr = 'disabled style="background:#F4F5F6;color:#6b7280;"';
   const kompakt = !isSonderrolle(state.session);
+  const schlank = state.session === "App-Admin"; // verschlankte Anordnung für den Administrator
 
   if (formFotoUrl) { URL.revokeObjectURL(formFotoUrl); formFotoUrl = null; }
   if (h.foto instanceof Blob) formFotoUrl = URL.createObjectURL(h.foto);
@@ -1509,12 +1510,14 @@ function renderForm(h) {
     </div>
     <form id="hydrant-form" data-id="${h.id}">
       ${fieldHTML("f-name", "Bezeichnung / Standortname", `<input id="f-name" value="${esc(h.name)}" placeholder="z. B. Marktplatz" ${stammdatenLocked ? lockedAttr : ""} required />`)}
+      ${schlank ? `<div class="row-2">` : ""}
       ${!formFeature("einheitSichtbar")
         ? `<input type="hidden" id="f-einheit-value" value="${esc(h.einheit)}" />`
         : fieldHTML("f-einheit", "Einheit", einheitLocked
           ? `<input id="f-einheit" value="${esc(h.einheit)}" disabled style="background:#F4F5F6;color:#6b7280;" /><input type="hidden" id="f-einheit-value" value="${esc(h.einheit)}" />`
           : `<select id="f-einheit">${EINHEITEN.map((e) => `<option value="${esc(e)}" ${h.einheit === e ? "selected" : ""}>${esc(e)}</option>`).join("")}</select>`
         )}
+      ${schlank ? `${fieldHTML("f-bezirk", "Bezirk", `<input id="f-bezirk" value="${esc(h.bezirk)}" placeholder="z. B. 34" list="bezirk-vorschlaege" ${stammdatenLocked ? lockedAttr : ""} />`)}</div>` : ""}
       ${formFeature("nennweiteEditierbar")
         ? fieldHTML("f-durchfluss", "Nennweite", `
         <div class="prefix-input">
@@ -1529,7 +1532,7 @@ function renderForm(h) {
       </div>
       ${kompakt
         ? `<input type="hidden" id="f-bezirk" value="${esc(h.bezirk)}" />`
-        : fieldHTML("f-bezirk", "Bezirk", `<input id="f-bezirk" value="${esc(h.bezirk)}" placeholder="z. B. 34" list="bezirk-vorschlaege" ${stammdatenLocked ? lockedAttr : ""} />`)}
+        : schlank ? "" : fieldHTML("f-bezirk", "Bezirk", `<input id="f-bezirk" value="${esc(h.bezirk)}" placeholder="z. B. 34" list="bezirk-vorschlaege" ${stammdatenLocked ? lockedAttr : ""} />`)}
       <datalist id="bezirk-vorschlaege">${alleBezirke().map((b) => `<option value="${esc(b)}"></option>`).join("")}</datalist>
       ${kompakt && !formFeature("nennweiteEditierbar") && h.durchfluss ? `<p style="font-size:14px;color:#374151;margin:-4px 0 14px;">Nennweite: <b style="font-size:15px;color:#111827;">${esc(h.durchfluss)}</b></p>` : ""}
       ${stammdatenLocked ? `<p style="font-size:12px;color:#9CA3AF;margin:-8px 0 14px;">🔒 Bezeichnung, Hydrantennummern und Bezirk können nur von Stadtwerke/App-Admin geändert werden.</p>` : ""}
@@ -1537,12 +1540,13 @@ function renderForm(h) {
         ${fieldHTML("f-lat", "Breitengrad (optional)", `<input id="f-lat" value="${esc(h.lat)}" inputmode="decimal" placeholder="50.1109" />`)}
         ${fieldHTML("f-lng", "Längengrad (optional)", `<input id="f-lng" value="${esc(h.lng)}" inputmode="decimal" placeholder="8.6821" />`)}
       </div>` : `<input type="hidden" id="f-lat" value="${esc(h.lat)}" /><input type="hidden" id="f-lng" value="${esc(h.lng)}" />`}
+      ${schlank ? `<div style="display:flex;justify-content:flex-end;margin:-2px 0 12px;"><button type="submit" class="btn btn-primary" style="width:auto;margin:0;padding:7px 22px;font-size:14px;">Speichern</button></div>` : ""}
       <div class="field">
         <span class="lbl">${formFeature("pinVersetzen") ? "Position auf der Karte" : "Lage auf der Karte"}</span>
         <div id="position-map"></div>
         ${formFeature("pinVersetzen") ? `<div id="position-lock-row" class="position-lock-row"></div>` : ""}
         <button type="button" id="btn-gps-locate" class="btn btn-outline btn-full" style="margin-top:8px;">${formFeature("pinVersetzen") ? "🎯 GPS-Standort ermitteln" : "🎯 Meinen Standort anzeigen"}</button>
-        <p style="font-size:11px;color:#9CA3AF;margin-top:6px;">${formFeature("pinVersetzen") ? "GPS ist bauartbedingt oft 3–10 m ungenau – Marker danach exakt auf den Schachtdeckel/Gehweg ziehen oder antippen." : "Der blaue Punkt zeigt deinen aktuellen Standort und hilft, den Hydranten schneller zu finden. Die Position des Hydranten bleibt dabei unverändert."}</p>
+        ${schlank ? "" : `<p style="font-size:11px;color:#9CA3AF;margin-top:6px;">${formFeature("pinVersetzen") ? "GPS ist bauartbedingt oft 3–10 m ungenau – Marker danach exakt auf den Schachtdeckel/Gehweg ziehen oder antippen." : "Der blaue Punkt zeigt deinen aktuellen Standort und hilft, den Hydranten schneller zu finden. Die Position des Hydranten bleibt dabei unverändert."}</p>`}
       </div>
       <input type="hidden" id="f-position-hatte-start" value="${typeof h.lat === "number" && typeof h.lng === "number" ? "1" : "0"}" />
       ${fieldHTML("f-lage", "Lage / Beschreibung", `<textarea id="f-lage" rows="2" placeholder="z. B. Gehweg vor Hausnummer 12, Deckel gelb">${esc(h.lage)}</textarea>`)}
@@ -1585,7 +1589,7 @@ function renderForm(h) {
             </label>`).join("")}
         </div>
       </div>
-      ${fieldHTML("f-bes", "Besonderheiten / Defekte", `<textarea id="f-bes" rows="3" placeholder="z. B. Kappe schwergängig, Zufahrt eingeschränkt…">${esc(h.besonderheiten)}</textarea>`)}
+      ${fieldHTML("f-bes", "Besonderheiten / Defekte", `<textarea id="f-bes" rows="${schlank ? 2 : 3}" placeholder="z. B. Kappe schwergängig, Zufahrt eingeschränkt…">${esc(h.besonderheiten)}</textarea>`)}
       <div class="field">
         <span class="lbl">Foto zur Beschädigung</span>
         <div class="foto-block foto-block-row">
