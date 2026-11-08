@@ -7,29 +7,22 @@
 <title>Bezirkslosung</title>
 <style>
   html, body { margin: 0; height: 100%; }
-  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: #12151b; color: #fff; overflow: hidden; }
-  /* Ein Bild über die ganze Seite: unscharfe Kopie füllt alles, das Bild selbst liegt vollständig und verkleinert darüber */
-  .unscharf { position: fixed; inset: -30px; background: center / cover no-repeat; filter: blur(26px) brightness(.6); }
-  .bild { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); display: none;
-          -webkit-mask-image: linear-gradient(to right, transparent, #000 14%, #000 86%, transparent), linear-gradient(to bottom, transparent, #000 14%, #000 86%, transparent);
-          -webkit-mask-composite: source-in; mask-image: linear-gradient(to right, transparent, #000 14%, #000 86%, transparent), linear-gradient(to bottom, transparent, #000 14%, #000 86%, transparent); mask-composite: intersect; }
-  .text { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 16px; box-sizing: border-box;
-          background: radial-gradient(ellipse at center, rgba(0,0,0,.42) 0%, rgba(0,0,0,.18) 45%, rgba(0,0,0,0) 72%); }
-  .label { font-size: clamp(20px, 6vw, 34px); font-weight: 800; letter-spacing: .3em; text-transform: uppercase; padding-left: .3em; text-shadow: 0 2px 10px rgba(0,0,0,.85); }
-  .zahl { font-size: clamp(110px, 40vmin, 340px); line-height: 1; font-weight: 900; font-variant-numeric: tabular-nums; margin: 0;
-          color: #fff; -webkit-text-stroke: clamp(3px, .9vmin, 8px) rgba(150,20,14,.9); paint-order: stroke fill;
-          text-shadow: 0 6px 28px rgba(0,0,0,.8), 0 0 6px rgba(0,0,0,.7); }
-  .zeile { font-size: clamp(16px, 5vw, 28px); font-weight: 700; text-shadow: 0 2px 10px rgba(0,0,0,.9); }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: #1b1f27; color: #fff; }
+  #bg { position: fixed; inset: 0; background: #1b1f27 center / cover no-repeat; }
+  #bg::after { content: ""; position: absolute; inset: 0; background: radial-gradient(circle at center, rgba(0,0,0,.45) 0%, rgba(0,0,0,.15) 70%); }
+  main { position: relative; min-height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 24px; box-sizing: border-box; }
+  .label { font-size: clamp(22px, 7vw, 44px); font-weight: 700; letter-spacing: .12em; text-transform: uppercase; text-shadow: 0 2px 10px rgba(0,0,0,.8); }
+  .zahl { font-size: clamp(120px, 52vmin, 420px); line-height: 1; font-weight: 900; font-variant-numeric: tabular-nums; text-shadow: 0 4px 24px rgba(0,0,0,.85), 0 0 4px rgba(0,0,0,.9); margin: 4px 0; }
+  .zeile { font-size: clamp(16px, 5vw, 26px); font-weight: 600; text-shadow: 0 2px 8px rgba(0,0,0,.85); }
 </style>
 </head>
 <body>
-<div class="unscharf" id="unscharf"></div>
-<img class="bild" id="bild" alt="" />
-<div class="text">
+<div id="bg"></div>
+<main>
   <div class="label">Bezirk</div>
   <div class="zahl" id="zahl">–</div>
   <div class="zeile" id="zeile"></div>
-</div>
+</main>
 <script>
   (function () {
     var p = new URLSearchParams(location.search);
@@ -37,20 +30,10 @@
     var j = (p.get("j") || "").replace(/[^0-9]/g, "").slice(0, 4);
     document.getElementById("zahl").textContent = b || "–";
     document.getElementById("zeile").textContent = "LZ Kleve" + (j ? " · " + j : "");
-    // Bild des Administrators (öffentlich abrufbar), falls vorhanden; sonst nimmt die Zahl den ganzen Platz
+    // Bild des Administrators (öffentlich abrufbar), falls vorhanden
     var url = "https://icepfjtifsdbefrgilan.supabase.co/storage/v1/object/public/bezirkslosung/bild.jpg";
     var img = new Image();
-    function anpassen() {
-      var el = document.getElementById("bild"); if (!el.naturalWidth) return;
-      var f = Math.min(window.innerWidth / el.naturalWidth, window.innerHeight / el.naturalHeight);
-      el.style.width = Math.round(el.naturalWidth * f) + "px"; el.style.height = Math.round(el.naturalHeight * f) + "px";
-    }
-    img.onload = function () {
-      var el = document.getElementById("bild"); el.src = url; el.style.display = "block";
-      el.onload = anpassen; anpassen();
-      document.getElementById("unscharf").style.backgroundImage = "url('" + url + "')";
-    };
-    window.addEventListener("resize", anpassen);
+    img.onload = function () { document.getElementById("bg").style.backgroundImage = "url('" + url + "')"; };
     img.src = url;
   })();
 </script>
