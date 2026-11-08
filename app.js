@@ -341,8 +341,8 @@ const state = {
   tab: "karte",
   selectedId: null,
   search: "",
-  bezirkslosung: {}, // { "2026": { einheiten: { "LZ Kleve": ["1","2"] }, gezogen: { "LZ Kleve|1": "Name" } } }
   losJahr: new Date().getFullYear(),
+  losZeilen: null, losGeladenJahr: null, losFehler: null, // nur im Arbeitsspeicher, Tabelle "bezirkslosung" nur für App-Admin lesbar
   zustandFilter: "alle",
   bezirkFilter: "alle",
   userLoc: null,
@@ -409,8 +409,8 @@ async function deleteHydrant(id, ohneSync) {
 }
 
 /* ---------- Server-Synchronisierung (Supabase) ---------- */
-const SYNC_SETTING_KEYS = ["infoText", "impressumText", "disclaimerText", "kontrollStartdatum", "kontrollEnddatum1", "kontrollEnddatum2", "kontrollGesamtAbschlussdatum", "lageFotoFreigegeben", "bezirkslosung"];
-const SYNC_DEFAULTS = { infoText: "", impressumText: "", disclaimerText: "", kontrollStartdatum: null, kontrollEnddatum1: null, kontrollEnddatum2: null, kontrollGesamtAbschlussdatum: null, lageFotoFreigegeben: false, bezirkslosung: {} };
+const SYNC_SETTING_KEYS = ["infoText", "impressumText", "disclaimerText", "kontrollStartdatum", "kontrollEnddatum1", "kontrollEnddatum2", "kontrollGesamtAbschlussdatum", "lageFotoFreigegeben"];
+const SYNC_DEFAULTS = { infoText: "", impressumText: "", disclaimerText: "", kontrollStartdatum: null, kontrollEnddatum1: null, kontrollEnddatum2: null, kontrollGesamtAbschlussdatum: null, lageFotoFreigegeben: false };
 const FOTO_BUCKET = "hydranten-fotos";
 let syncLaeuft = false, syncNochmal = false;
 
@@ -468,7 +468,6 @@ async function ladeEinstellungenInState() {
   state.kontrollEnddatum1 = await getSetting("kontrollEnddatum1", null);
   state.kontrollEnddatum2 = await getSetting("kontrollEnddatum2", null);
   state.kontrollGesamtAbschlussdatum = await getSetting("kontrollGesamtAbschlussdatum", null);
-  state.bezirkslosung = await getSetting("bezirkslosung", {}) || {};
 }
 
 function findeStateHydrant(id) { return state.hydranten.find((x) => x.id === id); }
@@ -1980,76 +1979,71 @@ async function ladeHelferUebersicht() {
 function helferGefiltert() {
   return (state.helferDaten || []).filter((r) => (!state.helferFilterName || r.helfer === state.helferFilterName) && (!state.helferFilterStatus || r.status === state.helferFilterStatus));
 }
-/* ---------- Bezirkslosung (App-Admin): Bezirke je Einheit, QR-Codes zum Drucken, Ziehungsliste ---------- */
-function losDaten(jahr) {
-  const alle = state.bezirkslosung || {};
-  return alle[String(jahr)] || { einheiten: {}, gezogen: {} };
-}
-async function losSpeichern(jahr, daten) {
-  state.bezirkslosung = { ...(state.bezirkslosung || {}), [String(jahr)]: daten };
-  await setSetting("bezirkslosung", state.bezirkslosung);
-}
+/* ---------- Bezirkslosung (nur App-Admin) ----------
+   Daten liegen ausschließlich in der Tabelle "bezirkslosung" (Zugriff per RLS nur für App-Admin), nie lokal
+   auf anderen Geräten. Die QR-Codes enthalten reinen Text und verweisen nicht auf die App. */
+const LOS_EINHEIT = "LZ Kleve";
 function bezirkVergleich(a, b) { return String(a).localeCompare(String(b), "de", { numeric: true }); }
-function bezirkeAusDaten(einheit) {
-  const set = new Set(state.hydranten.filter((h) => h.einheit === einheit).map((h) => (h.bezirk || "").trim()).filter(Boolean));
+function bezirkeAusDaten() {
+  const set = new Set(state.hydranten.filter((h) => h.einheit === LOS_EINHEIT).map((h) => (h.bezirk || "").trim()).filter((b) => /^\d+$/.test(b)));
   return Array.from(set).sort(bezirkVergleich);
 }
-function losEintraege(jahr) {
-  const d = losDaten(jahr), out = [];
-  EINHEITEN.forEach((e) => { (d.einheiten[e] || []).slice().sort(bezirkVergleich).forEach((b) => out.push({ einheit: e, bezirk: b })); });
-  return out;
+function losBezirke() { return (state.losZeilen || []).map((z) => z.bezirk).sort(bezirkVergleich); }
+async function losLaden() {
+  if (!sb) { state.losFehler = "Keine Verbindung zum Server."; state.losZeilen = []; render(); return; }
+  const jahr = state.losJahr;
+  const { data, error } = await sb.from("bezirkslosung").select("bezirk,gezogen_von").eq("jahr", jahr).eq("einheit", LOS_EINHEIT);
+  if (jahr !== state.losJahr || state.tab !== "los") return;
+  state.losGeladenJahr = jahr;
+  if (error) { state.losFehler = "Laden nicht möglich: " + (error.message || error); state.losZeilen = []; }
+  else { state.losFehler = null; state.losZeilen = data.map((z) => ({ bezirk: z.bezirk, gezogen: z.gezogen_von || "" })); }
+  render();
 }
-function losQrText(jahr, e) {
-  return `${location.origin}/?bezirk=${encodeURIComponent(e.bezirk)}&einheit=${encodeURIComponent(e.einheit)}&jahr=${encodeURIComponent(jahr)}`;
+async function losBezirkSetzen(bezirk, aktiv) {
+  const jahr = state.losJahr;
+  const { error } = aktiv
+    ? await sb.from("bezirkslosung").upsert({ jahr, einheit: LOS_EINHEIT, bezirk }, { onConflict: "jahr,einheit,bezirk", ignoreDuplicates: true })
+    : await sb.from("bezirkslosung").delete().eq("jahr", jahr).eq("einheit", LOS_EINHEIT).eq("bezirk", bezirk);
+  if (error) { showToast("Speichern nicht möglich: " + (error.message || error)); return false; }
+  return true;
 }
 function renderLosung() {
-  const jahr = state.losJahr, d = losDaten(jahr), eintraege = losEintraege(jahr);
-  const einheitenHTML = EINHEITEN.map((e) => {
-    const aktiv = Object.prototype.hasOwnProperty.call(d.einheiten, e);
-    const gewaehlt = d.einheiten[e] || [];
-    const verfuegbar = Array.from(new Set([...bezirkeAusDaten(e), ...gewaehlt])).sort(bezirkVergleich);
-    return `
-      <div style="background:#fff;border-radius:12px;padding:10px 12px;margin-bottom:8px;box-shadow:0 1px 3px rgba(0,0,0,0.05);">
-        <label style="display:flex;align-items:center;gap:10px;font-weight:600;">
-          <input type="checkbox" class="los-einheit" data-einheit="${esc(e)}" ${aktiv ? "checked" : ""} style="width:20px;height:20px;" />
-          <span style="flex:1;">${esc(e)}</span>
-          <span style="font-size:12px;font-weight:400;color:#6B7280;">${aktiv ? gewaehlt.length + " Bezirke" : ""}</span>
-        </label>
-        ${aktiv ? `
-          <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;">
-            ${verfuegbar.length ? verfuegbar.map((b) => `<button type="button" class="los-chip" data-einheit="${esc(e)}" data-bezirk="${esc(b)}" style="border:1px solid ${gewaehlt.includes(b) ? "#A72920" : "#D1D5DB"};background:${gewaehlt.includes(b) ? "#A72920" : "#fff"};color:${gewaehlt.includes(b) ? "#fff" : "#374151"};border-radius:999px;padding:5px 12px;font-size:13px;">${esc(b)}</button>`).join("") : `<span style="font-size:12px;color:#6B7280;">Keine Bezirke in den Hydrantendaten – unten manuell hinzufügen.</span>`}
-          </div>
-          <div style="display:flex;gap:6px;margin-top:10px;">
-            <input type="text" class="los-neu-input" data-einheit="${esc(e)}" placeholder="Bezirk manuell hinzufügen" style="flex:1;min-width:0;" />
-            <button type="button" class="btn btn-outline los-neu-btn" data-einheit="${esc(e)}" style="width:auto;padding:6px 14px;">+</button>
-          </div>` : ""}
-      </div>`;
-  }).join("");
-  const listeHTML = eintraege.length === 0 ? `<p style="font-size:13px;color:#6B7280;">Noch keine Bezirke ausgewählt.</p>` : eintraege.map((e) => `
-      <div style="display:flex;align-items:center;gap:8px;background:#fff;border-radius:12px;padding:8px 12px;margin-bottom:6px;box-shadow:0 1px 3px rgba(0,0,0,0.05);">
-        <div style="min-width:92px;"><b>Bezirk ${esc(e.bezirk)}</b><div style="font-size:11px;color:#6B7280;">${esc(e.einheit)}</div></div>
-        <input type="text" class="los-gezogen" data-key="${esc(e.einheit + "|" + e.bezirk)}" value="${esc(d.gezogen[e.einheit + "|" + e.bezirk] || "")}" placeholder="Gezogen von …" list="los-vorschlaege" style="flex:1;min-width:0;" />
-      </div>`).join("");
-  return `
+  const jahr = state.losJahr;
+  const kopf = `
     <button class="back-link" id="btn-los-back">‹ Zurück</button>
-    <h2 style="font-weight:600;margin:0 0 4px;">🎟 Bezirkslosung</h2>
-    <p style="font-size:12px;color:#6B7280;margin:0 0 12px;">Bezirke auswählen, QR-Codes ausdrucken und nach der Ziehung eintragen, wer welchen Bezirk gezogen hat.</p>
-
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
-      <label for="los-jahr" style="font-weight:600;">Jahr</label>
-      <input type="number" id="los-jahr" value="${esc(jahr)}" min="2000" max="2100" style="width:110px;" />
+    <h2 style="font-weight:600;margin:0 0 4px;">🎟 Bezirkslosung ${esc(LOS_EINHEIT)}</h2>
+    <p style="font-size:12px;color:#6B7280;margin:0 0 14px;">Nur für den Administrator sichtbar.</p>
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
+      <label for="los-jahr" style="font-weight:700;font-size:20px;">Jahr</label>
+      <input type="number" id="los-jahr" value="${esc(jahr)}" min="2000" max="2100" style="width:150px;font-size:26px;font-weight:700;text-align:center;padding:8px;" />
+    </div>`;
+  if (state.losGeladenJahr !== jahr || state.losZeilen === null) return kopf + `<p style="color:#6B7280;">Lade …</p>`;
+  if (state.losFehler) return kopf + `<p class="error-text">${esc(state.losFehler)}</p><button type="button" id="btn-los-neu" class="btn btn-outline btn-full">Erneut versuchen</button>`;
+  const gewaehlt = losBezirke();
+  const verfuegbar = Array.from(new Set([...bezirkeAusDaten(), ...gewaehlt])).sort(bezirkVergleich);
+  const fehlen = bezirkeAusDaten().filter((b) => !gewaehlt.includes(b));
+  const chips = verfuegbar.map((b) => { const an = gewaehlt.includes(b); return `<button type="button" class="los-chip" data-bezirk="${esc(b)}" style="border:1px solid ${an ? "#A72920" : "#D1D5DB"};background:${an ? "#A72920" : "#fff"};color:${an ? "#fff" : "#374151"};border-radius:999px;padding:5px 12px;font-size:13px;">${esc(b)}</button>`; }).join("");
+  const zeilen = state.losZeilen.slice().sort((a, b) => bezirkVergleich(a.bezirk, b.bezirk)).map((z) => `
+      <div style="display:flex;align-items:center;gap:8px;background:#fff;border-radius:12px;padding:6px 12px;margin-bottom:6px;box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+        <div style="min-width:84px;font-weight:700;">Bezirk ${esc(z.bezirk)}</div>
+        <input type="text" class="los-gezogen" data-bezirk="${esc(z.bezirk)}" value="${esc(z.gezogen)}" placeholder="Gezogen von …" style="flex:1;min-width:0;" />
+      </div>`).join("");
+  return kopf + `
+    <h3 style="font-size:14px;margin:0 0 8px;">1. Bezirke (${gewaehlt.length})</h3>
+    <div style="display:flex;flex-wrap:wrap;gap:6px;">${chips || `<span style="font-size:12px;color:#6B7280;">Keine Bezirke gefunden.</span>`}</div>
+    ${fehlen.length ? `<button type="button" id="btn-los-alle" class="btn btn-outline btn-full" style="margin-top:10px;">Alle ${fehlen.length} Bezirke aus den Daten übernehmen</button>` : ""}
+    <div style="display:flex;gap:6px;margin-top:10px;">
+      <input type="text" id="los-neu-input" placeholder="Bezirk manuell hinzufügen" style="flex:1;min-width:0;" />
+      <button type="button" id="los-neu-btn" class="btn btn-outline" style="width:auto;padding:6px 14px;">+</button>
     </div>
 
-    <h3 style="font-size:14px;margin:14px 0 8px;">1. Einheiten und Bezirke</h3>
-    ${einheitenHTML}
+    <h3 style="font-size:14px;margin:20px 0 8px;">2. QR-Codes</h3>
+    <button type="button" id="btn-los-qr-druck" class="btn btn-primary btn-full" ${gewaehlt.length ? "" : "disabled"}>🖨 ${gewaehlt.length} QR-Codes drucken</button>
+    <p style="font-size:11px;color:#9CA3AF;margin:6px 0 0;">Auf den Karten steht kein Bezirk, erst der Scan zeigt ihn. Die Reihenfolge wird beim Drucken gemischt.</p>
 
-    <h3 style="font-size:14px;margin:18px 0 8px;">2. QR-Codes</h3>
-    <button type="button" id="btn-los-qr-druck" class="btn btn-primary btn-full" ${eintraege.length ? "" : "disabled"}>🖨 ${eintraege.length} QR-Codes drucken</button>
-
-    <h3 style="font-size:14px;margin:18px 0 8px;">3. Ziehung ${esc(jahr)}</h3>
-    <datalist id="los-vorschlaege">${EINHEITEN.map((e) => `<option value="${esc(e)}"></option>`).join("")}</datalist>
-    ${listeHTML}
-    <button type="button" id="btn-los-liste-druck" class="btn btn-outline btn-full" style="margin-top:6px;" ${eintraege.length ? "" : "disabled"}>🖨 Liste drucken</button>
+    <h3 style="font-size:14px;margin:20px 0 8px;">3. Ziehung ${esc(jahr)}</h3>
+    ${zeilen || `<p style="font-size:13px;color:#6B7280;">Noch keine Bezirke ausgewählt.</p>`}
+    <button type="button" id="btn-los-liste-druck" class="btn btn-outline btn-full" style="margin-top:6px;" ${gewaehlt.length ? "" : "disabled"}>🖨 Liste drucken</button>
   `;
 }
 function losDruck(html) {
@@ -2064,51 +2058,55 @@ function losDruck(html) {
 function losQrDrucken() {
   const jahr = state.losJahr;
   if (typeof erzeugeQrMatrix !== "function") { showToast("QR-Erzeugung nicht verfügbar"); return; }
-  const karten = losEintraege(jahr).map((e) => `
+  const liste = losBezirke();
+  for (let i = liste.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [liste[i], liste[j]] = [liste[j], liste[i]]; }
+  const karten = liste.map((b) => `
     <div class="los-karte">
-      ${erzeugeQrMatrix(losQrText(jahr, e)).svg(190)}
-      <div class="los-karte-bezirk">Bezirk ${esc(e.bezirk)}</div>
-      <div class="los-karte-einheit">${esc(e.einheit)} · ${esc(jahr)}</div>
+      ${erzeugeQrMatrix(`${LOS_EINHEIT}, Bezirk ${b} (${jahr})`).svg(190)}
+      <div class="los-karte-einheit">Bezirkslosung ${esc(jahr)} · ${esc(LOS_EINHEIT)}</div>
     </div>`).join("");
   losDruck(`<div class="los-raster">${karten}</div>`);
 }
 function losListeDrucken() {
-  const jahr = state.losJahr, d = losDaten(jahr);
-  const zeilen = losEintraege(jahr).map((e) => `<tr><td>${esc(e.einheit)}</td><td>${esc(e.bezirk)}</td><td>${esc(d.gezogen[e.einheit + "|" + e.bezirk] || "")}</td></tr>`).join("");
-  losDruck(`<h1 style="font-size:18px;margin:0 0 10px;">Bezirkslosung ${esc(jahr)}</h1>
-    <table class="druck-tabelle"><thead><tr><th>Einheit</th><th>Bezirk</th><th>Gezogen von</th></tr></thead><tbody>${zeilen}</tbody></table>`);
+  const jahr = state.losJahr;
+  const zeilen = state.losZeilen.slice().sort((a, b) => bezirkVergleich(a.bezirk, b.bezirk)).map((z) => `<tr><td>${esc(z.bezirk)}</td><td>${esc(z.gezogen)}</td></tr>`).join("");
+  losDruck(`<h1 style="font-size:18px;margin:0 0 10px;">Bezirkslosung ${esc(jahr)} – ${esc(LOS_EINHEIT)}</h1>
+    <table class="druck-tabelle"><thead><tr><th>Bezirk</th><th>Gezogen von</th></tr></thead><tbody>${zeilen}</tbody></table>`);
 }
 function setupLosungHandlers() {
-  const jahr = () => state.losJahr;
   const $ = (id) => document.getElementById(id);
   $("btn-los-back").addEventListener("click", navZurueck);
-  $("los-jahr").addEventListener("change", (e) => { const j = parseInt(e.target.value, 10); if (j >= 2000 && j <= 2100) { state.losJahr = j; render(); } });
-  document.querySelectorAll(".los-einheit").forEach((cb) => cb.addEventListener("change", async () => {
-    const d = losDaten(jahr()), e = cb.dataset.einheit, neu = { einheiten: { ...d.einheiten }, gezogen: { ...d.gezogen } };
-    if (cb.checked) neu.einheiten[e] = bezirkeAusDaten(e);
-    else delete neu.einheiten[e];
-    await losSpeichern(jahr(), neu); render();
-  }));
+  $("los-jahr").addEventListener("change", (e) => {
+    const j = parseInt(e.target.value, 10);
+    if (j >= 2000 && j <= 2100) { state.losJahr = j; state.losZeilen = null; state.losGeladenJahr = null; render(); }
+  });
+  if (state.losGeladenJahr !== state.losJahr || state.losZeilen === null) { losLaden(); return; }
+  const neu = $("btn-los-neu"); if (neu) neu.addEventListener("click", () => { state.losZeilen = null; state.losGeladenJahr = null; render(); });
   document.querySelectorAll(".los-chip").forEach((b) => b.addEventListener("click", async () => {
-    const d = losDaten(jahr()), e = b.dataset.einheit, z = b.dataset.bezirk;
-    const liste = d.einheiten[e] || [];
-    const neu = { einheiten: { ...d.einheiten, [e]: liste.includes(z) ? liste.filter((x) => x !== z) : [...liste, z] }, gezogen: { ...d.gezogen } };
-    await losSpeichern(jahr(), neu); render();
+    const z = b.dataset.bezirk, an = !state.losZeilen.some((x) => x.bezirk === z);
+    if (!an && state.losZeilen.find((x) => x.bezirk === z).gezogen && !confirm(`Bezirk ${z} ist bereits einem Eintrag zugeordnet. Trotzdem entfernen?`)) return;
+    if (await losBezirkSetzen(z, an)) { state.losZeilen = an ? [...state.losZeilen, { bezirk: z, gezogen: "" }] : state.losZeilen.filter((x) => x.bezirk !== z); render(); }
   }));
-  const hinzu = async (e) => {
-    const inp = document.querySelector(`.los-neu-input[data-einheit="${CSS.escape(e)}"]`);
-    const z = (inp && inp.value || "").trim();
-    if (!z) return;
-    const d = losDaten(jahr()), liste = d.einheiten[e] || [];
-    if (!liste.includes(z)) await losSpeichern(jahr(), { einheiten: { ...d.einheiten, [e]: [...liste, z] }, gezogen: { ...d.gezogen } });
-    render();
+  const alle = $("btn-los-alle");
+  if (alle) alle.addEventListener("click", async () => {
+    const fehlen = bezirkeAusDaten().filter((b) => !state.losZeilen.some((x) => x.bezirk === b));
+    const jahr = state.losJahr;
+    const { error } = await sb.from("bezirkslosung").upsert(fehlen.map((bezirk) => ({ jahr, einheit: LOS_EINHEIT, bezirk })), { onConflict: "jahr,einheit,bezirk", ignoreDuplicates: true });
+    if (error) { showToast("Speichern nicht möglich: " + (error.message || error)); return; }
+    state.losZeilen = [...state.losZeilen, ...fehlen.map((bezirk) => ({ bezirk, gezogen: "" }))]; render();
+  });
+  const hinzu = async () => {
+    const z = ($("los-neu-input").value || "").trim();
+    if (!z || state.losZeilen.some((x) => x.bezirk === z)) return;
+    if (await losBezirkSetzen(z, true)) { state.losZeilen = [...state.losZeilen, { bezirk: z, gezogen: "" }]; render(); }
   };
-  document.querySelectorAll(".los-neu-btn").forEach((b) => b.addEventListener("click", () => hinzu(b.dataset.einheit)));
-  document.querySelectorAll(".los-neu-input").forEach((i) => i.addEventListener("keydown", (ev) => { if (ev.key === "Enter") { ev.preventDefault(); hinzu(i.dataset.einheit); } }));
+  $("los-neu-btn").addEventListener("click", hinzu);
+  $("los-neu-input").addEventListener("keydown", (ev) => { if (ev.key === "Enter") { ev.preventDefault(); hinzu(); } });
   document.querySelectorAll(".los-gezogen").forEach((i) => i.addEventListener("change", async () => {
-    const d = losDaten(jahr()), gezogen = { ...d.gezogen };
-    if (i.value.trim()) gezogen[i.dataset.key] = i.value.trim(); else delete gezogen[i.dataset.key];
-    await losSpeichern(jahr(), { einheiten: { ...d.einheiten }, gezogen });
+    const wert = i.value.trim();
+    const { error } = await sb.from("bezirkslosung").update({ gezogen_von: wert, geaendert_am: new Date().toISOString() }).eq("jahr", state.losJahr).eq("einheit", LOS_EINHEIT).eq("bezirk", i.dataset.bezirk);
+    if (error) { showToast("Speichern nicht möglich: " + (error.message || error)); return; }
+    const z = state.losZeilen.find((x) => x.bezirk === i.dataset.bezirk); if (z) z.gezogen = wert;
     showToast("Gespeichert");
   }));
   const q = $("btn-los-qr-druck"); if (q) q.addEventListener("click", losQrDrucken);
@@ -2695,6 +2693,7 @@ function attachHandlers() {
       if (state.session !== "App-Admin") return;
       navVor();
       state.tab = "los";
+      state.losZeilen = null; state.losGeladenJahr = null;
       render();
     });
     const btnKonten = document.getElementById("btn-konten-oeffnen");
@@ -3930,6 +3929,7 @@ async function handleLogout() {
   // Umkreis-Filter) sind an die aktuelle Einsatzleitungs-Sitzung gebunden und werden beim
   // Ausloggen zurückgesetzt, statt veraltet stehen zu bleiben.
   // Suche, Filter und Kartenausschnitt gehören zur Sitzung: der nächste Nutzer am selben Gerät startet sauber.
+  state.losZeilen = null; state.losGeladenJahr = null; state.losFehler = null;
   state.search = "";
   state.zustandFilter = "alle";
   state.bezirkFilter = "alle";
