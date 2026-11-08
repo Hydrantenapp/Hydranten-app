@@ -11,8 +11,8 @@
   #bg { position: fixed; inset: 0; background: center / contain no-repeat; }
   #bg::after { content: ""; position: absolute; inset: 0; background: radial-gradient(circle at center, rgba(0,0,0,.18) 0%, rgba(0,0,0,0) 70%); }
   main { position: relative; min-height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 24px; box-sizing: border-box; }
-  .label { font-size: clamp(22px, 7vw, 44px); font-weight: 700; letter-spacing: .12em; text-transform: uppercase; text-shadow: 0 2px 10px rgba(0,0,0,.8); }
-  .zahl { font-size: clamp(120px, 52vmin, 420px); line-height: 1; font-weight: 900; font-variant-numeric: tabular-nums; text-shadow: 0 4px 24px rgba(0,0,0,.85), 0 0 4px rgba(0,0,0,.9); margin: 4px 0; }
+  .label { font-size: clamp(18px, 5vw, 32px); font-weight: 700; letter-spacing: .12em; text-transform: uppercase; text-shadow: 0 2px 10px rgba(0,0,0,.8); }
+  .zahl { font-size: clamp(80px, 28vmin, 240px); line-height: 1; font-weight: 900; font-variant-numeric: tabular-nums; text-shadow: 0 4px 24px rgba(0,0,0,.85), 0 0 4px rgba(0,0,0,.9); margin: 4px 0; }
   .zeile { font-size: clamp(16px, 5vw, 26px); font-weight: 600; text-shadow: 0 2px 8px rgba(0,0,0,.85); }
 </style>
 </head>
@@ -40,17 +40,48 @@
         var x = c.getContext("2d"); x.drawImage(img, 0, 0, 24, 24);
         var d = x.getImageData(0, 0, 24, 24).data, r = 0, g = 0, bl = 0, a = 0, n = 0;
         for (var i = 0; i < 24; i++) for (var k = 0; k < 24; k++) {
-          if (i > 1 && i < 22 && k > 1 && k < 22) continue;
+          if (i > 1) continue; // oberste Zeilen: dort ist der Bildrand am "reinsten"
           var o = (i * 24 + k) * 4; r += d[o]; g += d[o + 1]; bl += d[o + 2]; a += d[o + 3]; n++;
         }
         if (a / n < 128) { document.body.style.background = "#1b1f27"; return; }
         document.body.style.background = "rgb(" + Math.round(r / n) + "," + Math.round(g / n) + "," + Math.round(bl / n) + ")";
       } catch (e) { document.body.style.background = "#1b1f27"; }
     }
+    // Leere Randflächen des Bildes (Hintergrundfarbe) abschneiden, damit der eigentliche Inhalt möglichst groß erscheint,
+    // ohne dass etwas vom Inhalt verloren geht. Ohne Messmöglichkeit bleibt es bei "komplett sichtbar".
+    function vergroessern(img) {
+      try {
+        var W = img.naturalWidth, H = img.naturalHeight, cw = 96, ch = Math.max(8, Math.round(96 * H / W));
+        var c = document.createElement("canvas"); c.width = cw; c.height = ch;
+        var x = c.getContext("2d"); x.drawImage(img, 0, 0, cw, ch);
+        var d = x.getImageData(0, 0, cw, ch).data, r = 0, g = 0, b = 0, a = 0, n = 0, i, k, o;
+        function rand(i, k) { return i < 2 || k < 2 || i >= ch - 2 || k >= cw - 2; }
+        for (i = 0; i < ch; i++) for (k = 0; k < cw; k++) if (rand(i, k)) { o = (i * cw + k) * 4; r += d[o]; g += d[o + 1]; b += d[o + 2]; a += d[o + 3]; n++; }
+        r /= n; g /= n; b /= n; a /= n;
+        var x0 = cw, x1 = -1, y0 = ch, y1 = -1;
+        for (i = 0; i < ch; i++) for (k = 0; k < cw; k++) {
+          o = (i * cw + k) * 4;
+          var anders = a < 128 ? d[o + 3] > 60 : (Math.abs(d[o] - r) + Math.abs(d[o + 1] - g) + Math.abs(d[o + 2] - b) > 90);
+          if (anders) { if (k < x0) x0 = k; if (k > x1) x1 = k; if (i < y0) y0 = i; if (i > y1) y1 = i; }
+        }
+        if (x1 < 0) return;
+        var sx = W / cw, sy = H / ch, bx = x0 * sx, by = y0 * sy, bw = (x1 - x0 + 1) * sx, bh = (y1 - y0 + 1) * sy;
+        var vw = window.innerWidth, vh = window.innerHeight;
+        var s = Math.min(vw * 0.96 / bw, vh * 0.96 / bh), fit = Math.min(vw / W, vh / H);
+        if (s <= fit * 1.02) return;
+        var px = vw / 2 - (bx + bw / 2) * s, py = vh / 2 - (by + bh / 2) * s;
+        var bg = document.getElementById("bg");
+        bg.style.backgroundSize = Math.round(W * s) + "px " + Math.round(H * s) + "px";
+        bg.style.backgroundPosition = Math.round(px) + "px " + Math.round(py) + "px";
+      } catch (e) {}
+    }
     function laden(ext, ohneCors) {
       var url = base + ext + "?t=" + Date.now(), img = new Image(); // immer frisch laden, nie ein altes Bild aus dem Zwischenspeicher
       if (!ohneCors) img.crossOrigin = "anonymous";
-      img.onload = function () { document.getElementById("bg").style.backgroundImage = "url('" + url + "')"; if (!ohneCors) randfarbe(img); };
+      img.onload = function () {
+        document.getElementById("bg").style.backgroundImage = "url('" + url + "')";
+        if (!ohneCors) { randfarbe(img); vergroessern(img); }
+      };
       img.onerror = function () { if (!ohneCors) laden(ext, true); else if (ext === "png") laden("jpg"); };
       img.src = url;
     }
