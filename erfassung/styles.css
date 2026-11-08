@@ -52,3 +52,10 @@ label.lbl { display:block; font-size:12px; color:var(--muted); margin:10px 0 4px
 .nw-leer span { background:#F8D4D4; color:var(--err); }
 .nw-leer input { background:transparent; }
 .nw-hinweis { color:var(--err); font-size:13px; font-weight:600; margin:6px 0 0; }
+
+/* Kein seitliches Überlaufen auf schmalen Handys */
+html, body { max-width: 100%; overflow-x: hidden; }
+.row > *, .stats > *, .card > *, .item { min-width: 0; }
+.row > select, .row > div { flex: 1 1 0; }
+.item, .item-name, .item-sub, .note, .warn { overflow-wrap: anywhere; }
+select, input[type=text], input[type=search] { max-width: 100%; min-width: 0; }
