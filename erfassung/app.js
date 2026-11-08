@@ -245,6 +245,12 @@ function renderErfassen() {
     ${vorhanden}${nwVorhanden}
 
     <div class="card">
+      <h3>Nennweite</h3>
+      <div class="nw ${nwPflicht(c) && !c.nennweite ? "nw-leer" : ""}" id="nw-box"><span>H-</span><input type="text" id="e-nw" inputmode="numeric" value="${esc(String(c.nennweite || "").replace(/^H-?/i, ""))}" placeholder="Zahl eintragen" /></div>
+      <p class="nw-hinweis" id="nw-hinweis" ${nwPflicht(c) && !c.nennweite ? "" : "hidden"}>Pflichtfeld: Nennweite eintragen, dann kann gespeichert werden.</p>
+    </div>
+
+    <div class="card">
       <h3>Karte</h3>
       <p class="note">Während der Messung springt der Pin automatisch auf die beste GPS-Position. Nach „Messung beenden“ kannst du die Karte antippen oder den Pin ziehen, um ihn genau auf den Hydranten zu setzen. Der blaue Kreis zeigt, wo das GPS dich vermutet.</p>
       <div id="karte"></div>
@@ -263,12 +269,6 @@ function renderErfassen() {
         <div style="flex:1"><label class="lbl">Längengrad</label><input type="text" id="e-lng" inputmode="decimal" value="${c.lng ?? ""}" placeholder="6.13…" /></div>
       </div>
       <p class="note" id="e-pos-info">${c.zeit && Number.isFinite(c.acc) ? `Übernommen ${fmtZeit(c.zeit)}, Genauigkeit ±${Math.round(c.acc)} m.` : (c.zeit ? `Per Pin gesetzt ${fmtZeit(c.zeit)}.` : "")}</p>
-    </div>
-
-    <div class="card">
-      <h3>Nennweite</h3>
-      <div class="nw ${nwPflicht(c) && !c.nennweite ? "nw-leer" : ""}" id="nw-box"><span>H-</span><input type="text" id="e-nw" inputmode="numeric" value="${esc(String(c.nennweite || "").replace(/^H-?/i, ""))}" placeholder="Zahl eintragen" /></div>
-      <p class="nw-hinweis" id="nw-hinweis" ${nwPflicht(c) && !c.nennweite ? "" : "hidden"}>Pflichtfeld: Nennweite eintragen, dann kann gespeichert werden.</p>
     </div>
 
     <button class="btn btn-primary" id="btn-speichern" ${nwPflicht(c) && !c.nennweite ? "disabled" : ""}>Speichern</button>
