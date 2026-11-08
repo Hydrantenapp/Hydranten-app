@@ -3778,6 +3778,12 @@ async function handleLogout() {
   // Einsatzleitungs-Pin (automatischer Standort) sowie die Einsatzplanung (manueller Pin +
   // Umkreis-Filter) sind an die aktuelle Einsatzleitungs-Sitzung gebunden und werden beim
   // Ausloggen zurückgesetzt, statt veraltet stehen zu bleiben.
+  // Suche, Filter und Kartenausschnitt gehören zur Sitzung: der nächste Nutzer am selben Gerät startet sauber.
+  state.search = "";
+  state.zustandFilter = "alle";
+  state.bezirkFilter = "alle";
+  state.mapView = null;
+  state.userLoc = null;
   state.einsatzleitungLivePin = null;
   state.einsatzplanungPin = null;
   state.einsatzplanungRadius = null;
