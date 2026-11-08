@@ -341,6 +341,8 @@ const state = {
   tab: "karte",
   selectedId: null,
   search: "",
+  bezirkslosung: {}, // { "2026": { einheiten: { "LZ Kleve": ["1","2"] }, gezogen: { "LZ Kleve|1": "Name" } } }
+  losJahr: new Date().getFullYear(),
   zustandFilter: "alle",
   bezirkFilter: "alle",
   userLoc: null,
@@ -407,8 +409,8 @@ async function deleteHydrant(id, ohneSync) {
 }
 
 /* ---------- Server-Synchronisierung (Supabase) ---------- */
-const SYNC_SETTING_KEYS = ["infoText", "impressumText", "disclaimerText", "kontrollStartdatum", "kontrollEnddatum1", "kontrollEnddatum2", "kontrollGesamtAbschlussdatum", "lageFotoFreigegeben"];
-const SYNC_DEFAULTS = { infoText: "", impressumText: "", disclaimerText: "", kontrollStartdatum: null, kontrollEnddatum1: null, kontrollEnddatum2: null, kontrollGesamtAbschlussdatum: null, lageFotoFreigegeben: false };
+const SYNC_SETTING_KEYS = ["infoText", "impressumText", "disclaimerText", "kontrollStartdatum", "kontrollEnddatum1", "kontrollEnddatum2", "kontrollGesamtAbschlussdatum", "lageFotoFreigegeben", "bezirkslosung"];
+const SYNC_DEFAULTS = { infoText: "", impressumText: "", disclaimerText: "", kontrollStartdatum: null, kontrollEnddatum1: null, kontrollEnddatum2: null, kontrollGesamtAbschlussdatum: null, lageFotoFreigegeben: false, bezirkslosung: {} };
 const FOTO_BUCKET = "hydranten-fotos";
 let syncLaeuft = false, syncNochmal = false;
 
@@ -466,6 +468,7 @@ async function ladeEinstellungenInState() {
   state.kontrollEnddatum1 = await getSetting("kontrollEnddatum1", null);
   state.kontrollEnddatum2 = await getSetting("kontrollEnddatum2", null);
   state.kontrollGesamtAbschlussdatum = await getSetting("kontrollGesamtAbschlussdatum", null);
+  state.bezirkslosung = await getSetting("bezirkslosung", {}) || {};
 }
 
 function findeStateHydrant(id) { return state.hydranten.find((x) => x.id === id); }
@@ -677,7 +680,7 @@ function renderNachSyncErlaubt() {
   if (document.getElementById("hydrant-form")) return false; // offenes Formular nicht zerstören
   const a = document.activeElement;
   if (a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)) return false;
-  if (state.tab === "konten" || state.tab === "daten-loeschen" || state.tab === "helfer") return false;
+  if (state.tab === "konten" || state.tab === "daten-loeschen" || state.tab === "helfer" || state.tab === "los") return false;
   return true;
 }
 
@@ -1842,6 +1845,10 @@ function renderDatenAppAdmin() {
       <span>📍 Erfassungen der Helfer</span><span class="info-link-chevron">›</span>
     </button>
 
+    <button type="button" id="btn-los-oeffnen" class="info-link-row" style="border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,0.05);margin-top:6px;">
+      <span>🎟 Bezirkslosung &amp; QR-Codes</span><span class="info-link-chevron">›</span>
+    </button>
+
     <button type="button" id="btn-konten-oeffnen" class="info-link-row" style="border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,0.05);margin-top:6px;">
       <span>👥 Konten &amp; Passwörter</span><span class="info-link-chevron">›</span>
     </button>
@@ -1973,6 +1980,141 @@ async function ladeHelferUebersicht() {
 function helferGefiltert() {
   return (state.helferDaten || []).filter((r) => (!state.helferFilterName || r.helfer === state.helferFilterName) && (!state.helferFilterStatus || r.status === state.helferFilterStatus));
 }
+/* ---------- Bezirkslosung (App-Admin): Bezirke je Einheit, QR-Codes zum Drucken, Ziehungsliste ---------- */
+function losDaten(jahr) {
+  const alle = state.bezirkslosung || {};
+  return alle[String(jahr)] || { einheiten: {}, gezogen: {} };
+}
+async function losSpeichern(jahr, daten) {
+  state.bezirkslosung = { ...(state.bezirkslosung || {}), [String(jahr)]: daten };
+  await setSetting("bezirkslosung", state.bezirkslosung);
+}
+function bezirkVergleich(a, b) { return String(a).localeCompare(String(b), "de", { numeric: true }); }
+function bezirkeAusDaten(einheit) {
+  const set = new Set(state.hydranten.filter((h) => h.einheit === einheit).map((h) => (h.bezirk || "").trim()).filter(Boolean));
+  return Array.from(set).sort(bezirkVergleich);
+}
+function losEintraege(jahr) {
+  const d = losDaten(jahr), out = [];
+  EINHEITEN.forEach((e) => { (d.einheiten[e] || []).slice().sort(bezirkVergleich).forEach((b) => out.push({ einheit: e, bezirk: b })); });
+  return out;
+}
+function losQrText(jahr, e) {
+  return `${location.origin}/?bezirk=${encodeURIComponent(e.bezirk)}&einheit=${encodeURIComponent(e.einheit)}&jahr=${encodeURIComponent(jahr)}`;
+}
+function renderLosung() {
+  const jahr = state.losJahr, d = losDaten(jahr), eintraege = losEintraege(jahr);
+  const einheitenHTML = EINHEITEN.map((e) => {
+    const aktiv = Object.prototype.hasOwnProperty.call(d.einheiten, e);
+    const gewaehlt = d.einheiten[e] || [];
+    const verfuegbar = Array.from(new Set([...bezirkeAusDaten(e), ...gewaehlt])).sort(bezirkVergleich);
+    return `
+      <div style="background:#fff;border-radius:12px;padding:10px 12px;margin-bottom:8px;box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+        <label style="display:flex;align-items:center;gap:10px;font-weight:600;">
+          <input type="checkbox" class="los-einheit" data-einheit="${esc(e)}" ${aktiv ? "checked" : ""} style="width:20px;height:20px;" />
+          <span style="flex:1;">${esc(e)}</span>
+          <span style="font-size:12px;font-weight:400;color:#6B7280;">${aktiv ? gewaehlt.length + " Bezirke" : ""}</span>
+        </label>
+        ${aktiv ? `
+          <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;">
+            ${verfuegbar.length ? verfuegbar.map((b) => `<button type="button" class="los-chip" data-einheit="${esc(e)}" data-bezirk="${esc(b)}" style="border:1px solid ${gewaehlt.includes(b) ? "#A72920" : "#D1D5DB"};background:${gewaehlt.includes(b) ? "#A72920" : "#fff"};color:${gewaehlt.includes(b) ? "#fff" : "#374151"};border-radius:999px;padding:5px 12px;font-size:13px;">${esc(b)}</button>`).join("") : `<span style="font-size:12px;color:#6B7280;">Keine Bezirke in den Hydrantendaten – unten manuell hinzufügen.</span>`}
+          </div>
+          <div style="display:flex;gap:6px;margin-top:10px;">
+            <input type="text" class="los-neu-input" data-einheit="${esc(e)}" placeholder="Bezirk manuell hinzufügen" style="flex:1;min-width:0;" />
+            <button type="button" class="btn btn-outline los-neu-btn" data-einheit="${esc(e)}" style="width:auto;padding:6px 14px;">+</button>
+          </div>` : ""}
+      </div>`;
+  }).join("");
+  const listeHTML = eintraege.length === 0 ? `<p style="font-size:13px;color:#6B7280;">Noch keine Bezirke ausgewählt.</p>` : eintraege.map((e) => `
+      <div style="display:flex;align-items:center;gap:8px;background:#fff;border-radius:12px;padding:8px 12px;margin-bottom:6px;box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+        <div style="min-width:92px;"><b>Bezirk ${esc(e.bezirk)}</b><div style="font-size:11px;color:#6B7280;">${esc(e.einheit)}</div></div>
+        <input type="text" class="los-gezogen" data-key="${esc(e.einheit + "|" + e.bezirk)}" value="${esc(d.gezogen[e.einheit + "|" + e.bezirk] || "")}" placeholder="Gezogen von …" list="los-vorschlaege" style="flex:1;min-width:0;" />
+      </div>`).join("");
+  return `
+    <button class="back-link" id="btn-los-back">‹ Zurück</button>
+    <h2 style="font-weight:600;margin:0 0 4px;">🎟 Bezirkslosung</h2>
+    <p style="font-size:12px;color:#6B7280;margin:0 0 12px;">Bezirke auswählen, QR-Codes ausdrucken und nach der Ziehung eintragen, wer welchen Bezirk gezogen hat.</p>
+
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+      <label for="los-jahr" style="font-weight:600;">Jahr</label>
+      <input type="number" id="los-jahr" value="${esc(jahr)}" min="2000" max="2100" style="width:110px;" />
+    </div>
+
+    <h3 style="font-size:14px;margin:14px 0 8px;">1. Einheiten und Bezirke</h3>
+    ${einheitenHTML}
+
+    <h3 style="font-size:14px;margin:18px 0 8px;">2. QR-Codes</h3>
+    <button type="button" id="btn-los-qr-druck" class="btn btn-primary btn-full" ${eintraege.length ? "" : "disabled"}>🖨 ${eintraege.length} QR-Codes drucken</button>
+
+    <h3 style="font-size:14px;margin:18px 0 8px;">3. Ziehung ${esc(jahr)}</h3>
+    <datalist id="los-vorschlaege">${EINHEITEN.map((e) => `<option value="${esc(e)}"></option>`).join("")}</datalist>
+    ${listeHTML}
+    <button type="button" id="btn-los-liste-druck" class="btn btn-outline btn-full" style="margin-top:6px;" ${eintraege.length ? "" : "disabled"}>🖨 Liste drucken</button>
+  `;
+}
+function losDruck(html) {
+  let el = document.getElementById("los-druck");
+  if (!el) { el = document.createElement("div"); el.id = "los-druck"; document.body.appendChild(el); }
+  el.innerHTML = html;
+  document.body.classList.add("los-druck-aktiv");
+  const aufraeumen = () => { document.body.classList.remove("los-druck-aktiv"); el.innerHTML = ""; window.removeEventListener("afterprint", aufraeumen); };
+  window.addEventListener("afterprint", aufraeumen);
+  window.print();
+}
+function losQrDrucken() {
+  const jahr = state.losJahr;
+  if (typeof erzeugeQrMatrix !== "function") { showToast("QR-Erzeugung nicht verfügbar"); return; }
+  const karten = losEintraege(jahr).map((e) => `
+    <div class="los-karte">
+      ${erzeugeQrMatrix(losQrText(jahr, e)).svg(190)}
+      <div class="los-karte-bezirk">Bezirk ${esc(e.bezirk)}</div>
+      <div class="los-karte-einheit">${esc(e.einheit)} · ${esc(jahr)}</div>
+    </div>`).join("");
+  losDruck(`<div class="los-raster">${karten}</div>`);
+}
+function losListeDrucken() {
+  const jahr = state.losJahr, d = losDaten(jahr);
+  const zeilen = losEintraege(jahr).map((e) => `<tr><td>${esc(e.einheit)}</td><td>${esc(e.bezirk)}</td><td>${esc(d.gezogen[e.einheit + "|" + e.bezirk] || "")}</td></tr>`).join("");
+  losDruck(`<h1 style="font-size:18px;margin:0 0 10px;">Bezirkslosung ${esc(jahr)}</h1>
+    <table class="druck-tabelle"><thead><tr><th>Einheit</th><th>Bezirk</th><th>Gezogen von</th></tr></thead><tbody>${zeilen}</tbody></table>`);
+}
+function setupLosungHandlers() {
+  const jahr = () => state.losJahr;
+  const $ = (id) => document.getElementById(id);
+  $("btn-los-back").addEventListener("click", navZurueck);
+  $("los-jahr").addEventListener("change", (e) => { const j = parseInt(e.target.value, 10); if (j >= 2000 && j <= 2100) { state.losJahr = j; render(); } });
+  document.querySelectorAll(".los-einheit").forEach((cb) => cb.addEventListener("change", async () => {
+    const d = losDaten(jahr()), e = cb.dataset.einheit, neu = { einheiten: { ...d.einheiten }, gezogen: { ...d.gezogen } };
+    if (cb.checked) neu.einheiten[e] = bezirkeAusDaten(e);
+    else delete neu.einheiten[e];
+    await losSpeichern(jahr(), neu); render();
+  }));
+  document.querySelectorAll(".los-chip").forEach((b) => b.addEventListener("click", async () => {
+    const d = losDaten(jahr()), e = b.dataset.einheit, z = b.dataset.bezirk;
+    const liste = d.einheiten[e] || [];
+    const neu = { einheiten: { ...d.einheiten, [e]: liste.includes(z) ? liste.filter((x) => x !== z) : [...liste, z] }, gezogen: { ...d.gezogen } };
+    await losSpeichern(jahr(), neu); render();
+  }));
+  const hinzu = async (e) => {
+    const inp = document.querySelector(`.los-neu-input[data-einheit="${CSS.escape(e)}"]`);
+    const z = (inp && inp.value || "").trim();
+    if (!z) return;
+    const d = losDaten(jahr()), liste = d.einheiten[e] || [];
+    if (!liste.includes(z)) await losSpeichern(jahr(), { einheiten: { ...d.einheiten, [e]: [...liste, z] }, gezogen: { ...d.gezogen } });
+    render();
+  };
+  document.querySelectorAll(".los-neu-btn").forEach((b) => b.addEventListener("click", () => hinzu(b.dataset.einheit)));
+  document.querySelectorAll(".los-neu-input").forEach((i) => i.addEventListener("keydown", (ev) => { if (ev.key === "Enter") { ev.preventDefault(); hinzu(i.dataset.einheit); } }));
+  document.querySelectorAll(".los-gezogen").forEach((i) => i.addEventListener("change", async () => {
+    const d = losDaten(jahr()), gezogen = { ...d.gezogen };
+    if (i.value.trim()) gezogen[i.dataset.key] = i.value.trim(); else delete gezogen[i.dataset.key];
+    await losSpeichern(jahr(), { einheiten: { ...d.einheiten }, gezogen });
+    showToast("Gespeichert");
+  }));
+  const q = $("btn-los-qr-druck"); if (q) q.addEventListener("click", losQrDrucken);
+  const l = $("btn-los-liste-druck"); if (l) l.addEventListener("click", losListeDrucken);
+}
+
 function renderHelferUebersicht() {
   let inhalt;
   if (state.helferFehler) {
@@ -2250,7 +2392,7 @@ function behandleZurueckNavigation() {
   if (state.tab === "info") { state.tab = "karte"; render(); return; }
   if (state.tab === "statistik-koordinaten") { state.tab = state.statistikKoordinatenHerkunft || "statistik"; render(); return; }
   if (state.tab === "statistik") { state.tab = "karte"; render(); return; }
-  if (state.tab === "daten-loeschen" || state.tab === "konten" || state.tab === "helfer") { state.tab = "daten"; render(); return; }
+  if (state.tab === "daten-loeschen" || state.tab === "konten" || state.tab === "helfer" || state.tab === "los") { state.tab = "daten"; render(); return; }
   if (state.tab === "detail") { state.tab = "karte"; state.selectedId = null; render(); return; }
   if (state.tab === "hinzufuegen" && state.hkAktiv) { state.hkAktiv = false; render(); return; }
   // Sonst: bereits auf einer "Wurzel"-Ansicht (Karte/Nähe/Daten/Hydrantenkontrolle-Einstieg) -
@@ -2274,6 +2416,7 @@ function render() {
   else if (state.tab === "daten-loeschen") content.innerHTML = renderDatenLoeschen();
   else if (state.tab === "konten") content.innerHTML = renderKonten();
   else if (state.tab === "helfer") content.innerHTML = renderHelferUebersicht();
+  else if (state.tab === "los") content.innerHTML = renderLosung();
   else if (state.tab === "info") content.innerHTML = renderInfo();
   else if (state.tab === "info-doc") content.innerHTML = renderInfoDoc(state.infoDocKind);
   else if (state.tab === "statistik") content.innerHTML = renderStatistik();
@@ -2547,6 +2690,13 @@ function attachHandlers() {
       state.helferDaten = null; state.helferFehler = null;
       render();
     });
+    const btnLos = document.getElementById("btn-los-oeffnen");
+    if (btnLos) btnLos.addEventListener("click", () => {
+      if (state.session !== "App-Admin") return;
+      navVor();
+      state.tab = "los";
+      render();
+    });
     const btnKonten = document.getElementById("btn-konten-oeffnen");
     if (btnKonten) btnKonten.addEventListener("click", () => {
       if (state.session !== "App-Admin") return;
@@ -2581,6 +2731,7 @@ function attachHandlers() {
 
   if (state.tab === "konten") setupKontenHandlers();
   if (state.tab === "helfer") setupHelferHandlers();
+  if (state.tab === "los") setupLosungHandlers();
 
   if (state.tab === "daten-loeschen") {
     const back = document.getElementById("btn-loeschen-back");
@@ -3815,7 +3966,7 @@ function showApp() {
   if (statistikBtn) statistikBtn.classList.toggle("hidden", !hatStatistikZugriff(state.session));
   if (!hatStatistikZugriff(state.session) && state.tab === "statistik") state.tab = "karte";
   if (!hatStatistikInhaltZugriff(state.session) && state.tab === "statistik-koordinaten") state.tab = "karte";
-  if (state.session !== "App-Admin" && (state.tab === "daten-loeschen" || state.tab === "konten" || state.tab === "helfer")) state.tab = "karte";
+  if (state.session !== "App-Admin" && (state.tab === "daten-loeschen" || state.tab === "konten" || state.tab === "helfer" || state.tab === "los")) state.tab = "karte";
 
   if (state.session === "Einsatzleitung" && !state.einsatzleitungLivePin && navigator.geolocation) {
     navigator.geolocation.getCurrentPosition(

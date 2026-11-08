@@ -1,10 +1,11 @@
 /* Hydranten Feuerwehr Kleve – © 2026 Simone Loosen, Feuerwehr Kleve. Alle Rechte vorbehalten. Siehe LICENSE. */
-const CACHE_NAME = "hydranten-app-v35";
+const CACHE_NAME = "hydranten-app-v36";
 const PRECACHE_URLS = [
   "./",
   "./index.html",
   "./styles.css",
   "./app.js",
+  "./qr.js",
   "./manifest.json",
   "./icons/icon-32.png",
   "./icons/icon-180.png",
@@ -42,7 +43,7 @@ self.addEventListener("activate", (event) => {
 
 function istAppShellDatei(request) {
   const path = new URL(request.url).pathname;
-  return request.mode === "navigate" || /\/(index\.html|app\.js|styles\.css|manifest\.json)$/.test(path) || path.endsWith("/");
+  return request.mode === "navigate" || /\/(index\.html|app\.js|qr\.js|styles\.css|manifest\.json)$/.test(path) || path.endsWith("/");
 }
 
 self.addEventListener("fetch", (event) => {
