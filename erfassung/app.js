@@ -423,8 +423,8 @@ function baueKarte() {
     || (hatPosition ? { c: [c.lat, c.lng], z: 19 }
       : c.vorhandenPos ? { c: [c.vorhandenLat, c.vorhandenLng], z: 18 }
         : g.best ? { c: [g.best.lat, g.best.lng], z: 19 } : { c: [51.7869, 6.1387], z: 14 });
-  karte = L.map(el, { maxZoom: 20 }).setView(start.c, start.z);
-  L.tileLayer(OSM_URL, { maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>' }).addTo(karte);
+  karte = L.map(el, { maxZoom: 22 }).setView(start.c, start.z);
+  L.tileLayer(OSM_URL, { maxNativeZoom: 19, maxZoom: 22, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>' }).addTo(karte);
   if (c.vorhandenPos && !hatPosition) {
     L.circleMarker([c.vorhandenLat, c.vorhandenLng], { radius: 8, color: "#fff", weight: 2, fillColor: "#6b7280", fillOpacity: 0.9 }).addTo(karte).bindTooltip("Position in der Hauptapp", { permanent: false });
   }
