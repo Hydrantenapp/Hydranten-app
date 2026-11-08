@@ -604,12 +604,17 @@ function syncText() {
 }
 function zeigeSync() { const el = document.getElementById("sync-info"); if (el) el.innerHTML = syncText(); }
 
+/* Anfrage mit Zeitlimit, damit ein hängendes Netz den Abgleich nicht dauerhaft blockiert */
+function mitZeitlimit(p, ms) {
+  return Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error("Zeitüberschreitung")), ms || 25000))]);
+}
 async function syncen(meldung) {
-  if (!angemeldet() || !state.sb || state.sync.laeuft) return;
+  if (!angemeldet() || !state.sb) return;
+  if (state.sync.laeuft) { state.sync.nochmal = true; if (meldung) showToast("Abgleich läuft bereits, es wird danach noch einmal gesendet"); return; }
   if (!navigator.onLine) { if (meldung) showToast("Kein Netz. Es wird gesendet, sobald wieder Empfang da ist."); return; }
   state.sync.laeuft = true; state.sync.fehler = null; zeigeSync();
   try {
-    const { data: ses } = await state.sb.auth.getSession();
+    const { data: ses } = await mitZeitlimit(state.sb.auth.getSession());
     if (!ses.session) { await setMeta("angemeldet", false); state.sync.laeuft = false; render(); showToast("Bitte neu anmelden"); return; }
     for (const e of [...state.nachtrag.values()]) {
       if (e.gesendet && e.geaendert <= e.gesendet) continue;
@@ -618,7 +623,7 @@ async function syncen(meldung) {
         einheit: e.einheit || "", bezirk: e.bezirk || "", nennweite: e.nennweite || "", lat: e.lat, lng: e.lng,
         genauigkeit_m: e.acc ?? null, erfasst_am: e.zeit || e.geaendert, neu: !!e.neu,
       };
-      const { error } = await state.sb.from("nachtrag").upsert(zeile, { onConflict: "key,helfer" });
+      const { error } = await mitZeitlimit(state.sb.from("nachtrag").upsert(zeile, { onConflict: "key,helfer" }));
       if (error && error.code !== "42501") throw error;
       // 42501: Eintrag wurde schon von Simone übernommen und ist gesperrt → nicht erneut versuchen
       e.gesendet = new Date().toISOString();
@@ -626,7 +631,7 @@ async function syncen(meldung) {
     }
     const alle = [];
     for (let von = 0; ; von += 1000) {
-      const { data, error } = await state.sb.from("nachtrag").select("id,key,helfer,lat,nennweite,status").range(von, von + 999);
+      const { data, error } = await mitZeitlimit(state.sb.from("nachtrag").select("id,key,helfer,lat,nennweite,status").range(von, von + 999));
       if (error) throw error;
       alle.push(...data);
       if (data.length < 1000) break;
@@ -641,7 +646,12 @@ async function syncen(meldung) {
   }
   state.sync.laeuft = false;
   if (state.view === "home") render(); else zeigeSync();
+  // Während des Abgleichs neu gespeicherte Einträge sofort hinterherschicken
+  if (state.sync.nochmal && !state.sync.fehler) { state.sync.nochmal = false; syncen(false); } else state.sync.nochmal = false;
 }
+/* Offene Einträge regelmäßig und beim Zurückkehren in die App erneut senden */
+setInterval(() => { if (document.visibilityState === "visible" && angemeldet() && ungesendet() > 0) syncen(false); }, 30000);
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && angemeldet() && ungesendet() > 0) syncen(false); });
 
 /* ---------- Start ---------- */
 (async function start() {
