@@ -7,22 +7,32 @@
 <title>Bezirkslosung</title>
 <style>
   html, body { margin: 0; height: 100%; }
-  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: #1b1f27; color: #fff; }
-  #bg { position: fixed; inset: 0; background: #1b1f27 center / cover no-repeat; }
-  #bg::after { content: ""; position: absolute; inset: 0; background: radial-gradient(circle at center, rgba(0,0,0,.45) 0%, rgba(0,0,0,.15) 70%); }
-  main { position: relative; min-height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 24px; box-sizing: border-box; }
-  .label { font-size: clamp(22px, 7vw, 44px); font-weight: 700; letter-spacing: .12em; text-transform: uppercase; text-shadow: 0 2px 10px rgba(0,0,0,.8); }
-  .zahl { font-size: clamp(120px, 52vmin, 420px); line-height: 1; font-weight: 900; font-variant-numeric: tabular-nums; text-shadow: 0 4px 24px rgba(0,0,0,.85), 0 0 4px rgba(0,0,0,.9); margin: 4px 0; }
-  .zeile { font-size: clamp(16px, 5vw, 26px); font-weight: 600; text-shadow: 0 2px 8px rgba(0,0,0,.85); }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: #12151b; color: #fff; }
+  .seite { height: 100%; min-height: 100vh; display: flex; flex-direction: column; }
+  /* Bild komplett sichtbar (verkleinert, nichts wird abgeschnitten); unscharfe Kopie füllt den Rand */
+  .bildflaeche { position: relative; flex: 1 1 52%; min-height: 0; overflow: hidden; background: #12151b; }
+  .bildflaeche .unscharf { position: absolute; inset: -20px; background: center / cover no-repeat; filter: blur(22px) brightness(.55); }
+  .bildflaeche .bild { position: absolute; inset: 14px; background: center / contain no-repeat; filter: drop-shadow(0 6px 18px rgba(0,0,0,.5)); }
+  .tafel { flex: 0 0 auto; text-align: center; padding: 14px 16px calc(18px + env(safe-area-inset-bottom, 0)); background: linear-gradient(#b3261e, #7e1812); border-top: 6px solid #fff; box-shadow: 0 -8px 24px rgba(0,0,0,.45); }
+  .label { font-size: clamp(16px, 4.6vw, 26px); font-weight: 700; letter-spacing: .28em; text-transform: uppercase; opacity: .95; }
+  .zahl { font-size: clamp(96px, 30vh, 300px); line-height: 1; font-weight: 900; font-variant-numeric: tabular-nums; margin: 2px 0 4px; text-shadow: 0 3px 0 rgba(0,0,0,.35); }
+  .zeile { font-size: clamp(14px, 4vw, 22px); font-weight: 600; opacity: .95; }
+  @media (orientation: landscape) and (max-height: 520px) {
+    .seite { flex-direction: row; }
+    .tafel { flex: 0 0 42%; display: flex; flex-direction: column; justify-content: center; border-top: 0; border-left: 6px solid #fff; padding: 12px; }
+    .zahl { font-size: clamp(80px, 52vh, 260px); }
+  }
 </style>
 </head>
 <body>
-<div id="bg"></div>
-<main>
-  <div class="label">Bezirk</div>
-  <div class="zahl" id="zahl">–</div>
-  <div class="zeile" id="zeile"></div>
-</main>
+<div class="seite">
+  <div class="bildflaeche" id="bildflaeche"><div class="unscharf" id="unscharf"></div><div class="bild" id="bild"></div></div>
+  <div class="tafel">
+    <div class="label">Bezirk</div>
+    <div class="zahl" id="zahl">–</div>
+    <div class="zeile" id="zeile"></div>
+  </div>
+</div>
 <script>
   (function () {
     var p = new URLSearchParams(location.search);
@@ -30,10 +40,14 @@
     var j = (p.get("j") || "").replace(/[^0-9]/g, "").slice(0, 4);
     document.getElementById("zahl").textContent = b || "–";
     document.getElementById("zeile").textContent = "LZ Kleve" + (j ? " · " + j : "");
-    // Bild des Administrators (öffentlich abrufbar), falls vorhanden
+    // Bild des Administrators (öffentlich abrufbar), falls vorhanden; sonst nimmt die Zahl den ganzen Platz
     var url = "https://icepfjtifsdbefrgilan.supabase.co/storage/v1/object/public/bezirkslosung/bild.jpg";
     var img = new Image();
-    img.onload = function () { document.getElementById("bg").style.backgroundImage = "url('" + url + "')"; };
+    img.onload = function () {
+      document.getElementById("bild").style.backgroundImage = "url('" + url + "')";
+      document.getElementById("unscharf").style.backgroundImage = "url('" + url + "')";
+    };
+    img.onerror = function () { document.getElementById("bildflaeche").style.display = "none"; document.querySelector(".tafel").style.flex = "1 1 auto"; document.querySelector(".tafel").style.justifyContent = "center"; document.querySelector(".tafel").style.display = "flex"; document.querySelector(".tafel").style.flexDirection = "column"; };
     img.src = url;
   })();
 </script>
