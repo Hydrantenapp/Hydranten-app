@@ -913,17 +913,23 @@ function berechneKoordinatenLuecken() {
   const zaehlbar = state.hydranten.filter((h) => !istSonderBezirk(h));
   const fehlend = zaehlbar.filter((h) => typeof h.lat !== "number" || typeof h.lng !== "number");
   const bezirke = {};
+  const gesamtJeBezirk = {};
+  zaehlbar.forEach((h) => { const b = (h.bezirk || "").trim() || "(ohne Bezirk)"; gesamtJeBezirk[b] = (gesamtJeBezirk[b] || 0) + 1; });
   fehlend.forEach((h) => {
     const b = (h.bezirk || "").trim() || "(ohne Bezirk)";
     if (!bezirke[b]) bezirke[b] = [];
     bezirke[b].push(h);
   });
   Object.values(bezirke).forEach((liste) => liste.sort(vergleicheStrasseHausnummer));
+  const sortiert = (arr) => arr.sort((a, b) => a.localeCompare(b, "de", { numeric: true }));
   return {
     gesamt: zaehlbar.length,
     anzahlFehlend: fehlend.length,
     bezirke,
-    bezirkNamen: Object.keys(bezirke).sort((a, b) => a.localeCompare(b, "de", { numeric: true })),
+    bezirkNamen: sortiert(Object.keys(bezirke)),
+    // alle Bezirke (auch vollständig erfasste) für die Übersicht: vollständige werden grün angezeigt
+    gesamtJeBezirk,
+    alleBezirkNamen: sortiert(Object.keys(gesamtJeBezirk)),
   };
 }
 
@@ -2808,6 +2814,7 @@ function attachHandlers() {
     document.querySelectorAll(".koordinaten-bezirk-header").forEach((btn) => {
       btn.addEventListener("click", () => {
         const b = btn.dataset.bezirk;
+        if (!b) return; // vollständig erfasste Bezirke (grün) haben nichts aufzuklappen
         state.koordinatenExpandedBezirk = state.koordinatenExpandedBezirk === b ? null : b;
         render();
       });
@@ -3700,10 +3707,21 @@ function renderKoordinatenUebersicht() {
       <div class="hero-sub">${daten.anzahlFehlend === 0 ? "Alle Hydranten haben Koordinaten 🎉" : `${daten.bezirkNamen.length} Bezirk(e) betroffen`}</div>
     </div>
 
-    ${daten.anzahlFehlend === 0
-      ? `<div class="empty-state">Keine offenen Koordinaten mehr – alles vollständig.</div>`
-      : daten.bezirkNamen.map((b) => {
-          const liste = daten.bezirke[b];
+    ${daten.alleBezirkNamen.map((b) => {
+          const liste = daten.bezirke[b] || [];
+          const gesamtB = daten.gesamtJeBezirk[b];
+          if (liste.length === 0) {
+            return `
+            <div class="card statistik-bezirk-card">
+              <div class="koordinaten-bezirk-header" style="cursor:default;">
+                <div style="display:flex;align-items:center;gap:8px;">
+                  <span class="statistik-status-dot statistik-status-fertig"></span>
+                  <span style="font-weight:600;font-size:14px;">Bezirk ${esc(b)}</span>
+                </div>
+                <span style="font-size:12.5px;color:#2E7D46;font-weight:600;">✓ vollständig · ${gesamtB} von ${gesamtB}</span>
+              </div>
+            </div>`;
+          }
           const aufgeklappt = state.koordinatenExpandedBezirk === b;
           return `
             <div class="card statistik-bezirk-card">
@@ -3712,7 +3730,7 @@ function renderKoordinatenUebersicht() {
                   <span class="statistik-status-dot statistik-status-offen"></span>
                   <span style="font-weight:600;font-size:14px;">Bezirk ${esc(b)}</span>
                 </div>
-                <span style="font-size:12.5px;color:#6b7280;">${liste.length} ohne Koordinaten ${aufgeklappt ? "▴" : "▾"}</span>
+                <span style="font-size:12.5px;color:#6b7280;">${liste.length} von ${gesamtB} ohne Koordinaten ${aufgeklappt ? "▴" : "▾"}</span>
               </button>
               ${aufgeklappt ? `
                 <div class="statistik-hydrant-liste">
@@ -3726,8 +3744,7 @@ function renderKoordinatenUebersicht() {
               ` : ""}
             </div>
           `;
-        }).join("")
-    }
+        }).join("")}
   `;
 }
 
