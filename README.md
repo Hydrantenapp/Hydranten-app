@@ -271,7 +271,7 @@ Auf der Statistik-Seite (App-Admin) und in der Statistik-Ansicht der Stadtwerke 
 Für Rollen ohne Vollzugriff (Einheiten) ist das Formular „Hydrant bearbeiten“ verschlankt: Bezirk als kleines Schild in der Kopfzeile, kein Feld „Einheit“, Nennweite und Koordinaten vorerfasst und nicht änderbar (Nennweite nur als Text), die Karte zeigt die Lage des Hydranten, „Meinen Standort anzeigen“ setzt nur einen blauen Punkt für die eigene Position, „Letzte Kontrolle“ wird automatisch auf heute gesetzt und ist gesperrt. Vollzugriffs-Rollen sehen weiter alles. Die Schalter stehen gesammelt in `EINHEITEN_FORM` (app.js), jeweils auf `true` gesetzt ist die Funktion für Einheiten wieder da (inkl. Pin versetzen).
 
 ## Urheberrecht und Lizenz
-© 2026 Simone Loosen, Feuerwehr Kleve. Alle Rechte vorbehalten (steht auch dezent in der unteren Leiste und auf dem Anmeldebildschirm). Die App ist **keine** Open-Source-Software; Nutzung, Weitergabe und Änderung nur mit Genehmigung (siehe `LICENSE`). Eingebundene Bibliotheken und Kartendaten: siehe `THIRD-PARTY-NOTICES.md`.
+© 2026 Simone Loosen. Alle Rechte vorbehalten (steht auch dezent in der unteren Leiste und auf dem Anmeldebildschirm). Die App ist **keine** Open-Source-Software; Nutzung, Weitergabe und Änderung nur mit Genehmigung (siehe `LICENSE`). Eingebundene Bibliotheken und Kartendaten: siehe `THIRD-PARTY-NOTICES.md`.
 
 ## Erfassungs-App (Ordner `erfassung/`)
 Getrennte Minimal-App (eigene Adresse oder Unterordner `/erfassung/`). Sie nimmt nur **Position (Breiten-/Längengrad)** und **Nennweite** auf. Die Hydrantenliste kommt aus dem Excel-Export der Hauptapp und wird nur zum Aussuchen verwendet. Eigener lokaler Speicher (IndexedDB `hydranten-erfassung`), kein Zugriff auf die Hydranten-Tabelle.

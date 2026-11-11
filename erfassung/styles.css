@@ -1,4 +1,4 @@
-/* Hydranten Erfassung – © 2026 Simone Loosen, Feuerwehr Kleve. Alle Rechte vorbehalten. Siehe LICENSE. */
+/* Hydranten Erfassung – © 2026 Simone Loosen. Alle Rechte vorbehalten. Siehe LICENSE. */
 :root { --brand:#0F5C6E; --brand-dark:#0A4250; --bg:#F2F5F6; --ok:#2E7D46; --warn:#B26A00; --err:#C22E2E; --muted:#6b7280; }
 * { box-sizing: border-box; }
 html, body { margin:0; padding:0; background:var(--bg); color:#1b1f27; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; }

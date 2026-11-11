@@ -1,4 +1,4 @@
-/* Hydranten Erfassung – © 2026 Simone Loosen, Feuerwehr Kleve. Alle Rechte vorbehalten. Siehe LICENSE. */
+/* Hydranten Erfassung – © 2026 Simone Loosen. Alle Rechte vorbehalten. Siehe LICENSE. */
 /*
  * Minimal-App: nimmt NUR Position (Breiten-/Längengrad) und Nennweite eines Hydranten auf.
  * Sie hat keine Verbindung zur Datenbank der Hauptapp und teilt keinen Speicher mit ihr

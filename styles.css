@@ -1,4 +1,4 @@
-/* Hydranten Feuerwehr Kleve – © 2026 Simone Loosen, Feuerwehr Kleve. Alle Rechte vorbehalten. Siehe LICENSE. */
+/* Hydranten Feuerwehr Kleve – © 2026 Simone Loosen. Alle Rechte vorbehalten. Siehe LICENSE. */
 :root {
   --brand: #A72920;
   --brand-dark: #7A1B15;
@@ -660,7 +660,7 @@ body {
 /* Urheberrechtshinweis (unauffällig, immer sichtbar unten in der Navigationsleiste) */
 #bottom-nav { flex-wrap: wrap; }
 #bottom-nav::after {
-  content: "© 2026 Simone Loosen, Feuerwehr Kleve · Alle Rechte vorbehalten";
+  content: "© 2026 Simone Loosen · Konzeption, Softwareentwicklung & Gestaltung";
   order: 10;
   flex: 0 0 100%;
   text-align: center;
