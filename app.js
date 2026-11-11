@@ -2789,6 +2789,10 @@ function attachHandlers() {
       state.infoEditMode = !state.infoEditMode;
       render();
     });
+    document.querySelectorAll(".doc-fmt").forEach((btn) => {
+      btn.addEventListener("mousedown", (e) => e.preventDefault());
+      btn.addEventListener("click", () => dokumentFormatAnwenden(btn.dataset.fmt));
+    });
     const saveBtn = document.getElementById("btn-infodoc-save");
     if (saveBtn) saveBtn.addEventListener("click", async () => {
       if (!isSonderrolle(state.session)) return;
@@ -3543,14 +3547,72 @@ function renderInfoDoc(kind) {
     <div class="card">
       ${vollzugriff ? `<div style="text-align:right;margin-bottom:8px;"><button type="button" id="btn-infodoc-edit" class="btn btn-ghost" style="padding:5px 12px;font-size:12px;">${state.infoEditMode ? "Fertig" : "Bearbeiten"}</button></div>` : ""}
       ${state.infoEditMode
-        ? `<textarea id="infodoc-textarea" rows="14" class="info-textarea">${esc(text)}</textarea>
+        ? `<div class="doc-toolbar">
+             <button type="button" class="btn btn-ghost doc-fmt" data-fmt="h1" title="Große Überschrift">Überschrift</button>
+             <button type="button" class="btn btn-ghost doc-fmt" data-fmt="h2" title="Zwischenüberschrift">Zwischentitel</button>
+             <button type="button" class="btn btn-ghost doc-fmt" data-fmt="b" title="Fett"><b>F</b></button>
+             <button type="button" class="btn btn-ghost doc-fmt" data-fmt="i" title="Kursiv"><i>K</i></button>
+             <button type="button" class="btn btn-ghost doc-fmt" data-fmt="li" title="Aufzählung">• Liste</button>
+           </div>
+           <textarea id="infodoc-textarea" rows="14" class="info-textarea">${esc(text)}</textarea>
+           <p class="doc-hinweis">Text markieren und oben auf Fett, Kursiv oder Überschrift tippen. E-Mail-Adressen werden automatisch zu Links.</p>
            <button type="button" id="btn-infodoc-save" class="btn btn-primary btn-full" style="margin-top:8px;">Speichern</button>`
         : (text
-            ? `<p style="font-size:14px;white-space:pre-wrap;margin:0;">${esc(text)}</p>`
+            ? `<div class="doc-text">${formatiereDokument(text)}</div>`
             : `<p style="font-size:14px;color:#9CA3AF;margin:0;">Noch kein ${title} hinterlegt.</p>`)
       }
     </div>
   `;
+}
+
+/* Einfache, sichere Formatierung für Impressum/Disclaimer: "# " Überschrift, "## " Zwischentitel,
+   "- " Aufzählung, **fett**, *kursiv*, Leerzeile = neuer Absatz. Alles andere bleibt Text (wird escaped). */
+function formatiereDokument(text) {
+  const inline = (s) => esc(s)
+    .replace(/([\w.+-]+@[\w-]+(?:\.[\w-]+)+)/g, '<a href="mailto:$1">$1</a>')
+    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+    .replace(/\*(\S(?:.*?\S)?)\*/g, "<em>$1</em>");
+  const out = [];
+  let absatz = [];
+  let liste = [];
+  const flush = () => {
+    if (absatz.length) { out.push(`<p>${absatz.join("<br>")}</p>`); absatz = []; }
+    if (liste.length) { out.push(`<ul>${liste.map((x) => `<li>${x}</li>`).join("")}</ul>`); liste = []; }
+  };
+  String(text).replace(/\r/g, "").split("\n").forEach((zeile) => {
+    let m;
+    if (!zeile.trim()) { flush(); }
+    else if ((m = zeile.match(/^##\s+(.*)$/))) { flush(); out.push(`<h4 class="doc-h2">${inline(m[1])}</h4>`); }
+    else if ((m = zeile.match(/^#\s+(.*)$/))) { flush(); out.push(`<h3 class="doc-h1">${inline(m[1])}</h3>`); }
+    else if ((m = zeile.match(/^[-•]\s+(.*)$/))) { if (absatz.length) flush(); liste.push(inline(m[1])); }
+    else { if (liste.length) flush(); absatz.push(inline(zeile)); }
+  });
+  flush();
+  return out.join("");
+}
+
+/* Knöpfe über dem Textfeld: setzen die Markierung um die markierte Stelle bzw. vor die aktuelle Zeile */
+function dokumentFormatAnwenden(art) {
+  const ta = document.getElementById("infodoc-textarea");
+  if (!ta) return;
+  let { selectionStart: a, selectionEnd: b, value: v } = ta;
+  if (art === "b" || art === "i") {
+    const mk = art === "b" ? "**" : "*";
+    const sel = v.slice(a, b) || "Text";
+    ta.value = v.slice(0, a) + mk + sel + mk + v.slice(b);
+    ta.setSelectionRange(a + mk.length, a + mk.length + sel.length);
+  } else {
+    const pre = art === "h1" ? "# " : art === "h2" ? "## " : "- ";
+    const start = v.lastIndexOf("\n", a - 1) + 1;
+    let end = v.indexOf("\n", b); if (end < 0) end = v.length;
+    const block = v.slice(start, end).split("\n").map((l) => {
+      const clean = l.replace(/^(#{1,2}\s+|[-•]\s+)/, "");
+      return l.startsWith(pre) ? clean : pre + clean;
+    }).join("\n");
+    ta.value = v.slice(0, start) + block + v.slice(end);
+    ta.setSelectionRange(start, start + block.length);
+  }
+  ta.focus();
 }
 
 // Einheitlicher aufklappbarer Abschnitt für die Statistik-Seite - erweiterbar: für jede neue

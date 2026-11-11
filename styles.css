@@ -692,3 +692,15 @@ body {
   .los-karte-einheit { font-size: 10pt; color: #333; }
   @page { margin: 10mm; }
 }
+
+/* Impressum / Disclaimer: Formatierung */
+.doc-text { font-size: 14px; line-height: 1.55; color: #1f2937; }
+.doc-text p { margin: 0 0 12px; }
+.doc-text ul { margin: 0 0 12px; padding-left: 20px; }
+.doc-text li { margin-bottom: 3px; }
+.doc-text a { color: #C22E2E; text-decoration: underline; }
+.doc-h1 { font-size: 20px; font-weight: 700; margin: 4px 0 10px; }
+.doc-h2 { font-size: 15px; font-weight: 700; margin: 18px 0 4px; }
+.doc-toolbar { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.doc-toolbar .doc-fmt { padding: 5px 10px; font-size: 12.5px; }
+.doc-hinweis { font-size: 11.5px; color: #9CA3AF; margin: 6px 0 0; line-height: 1.4; }
