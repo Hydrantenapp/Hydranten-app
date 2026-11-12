@@ -130,11 +130,6 @@ function baueBesonderheiten(angekreuzt, freitext) {
   return [...DEFEKT_OPTIONEN.filter((o) => gewaehlt.has(o)), ...rest].join("\n");
 }
 
-// Entfernt die angekreuzten Defekt-Arten aus dem Text (freier Text bleibt stehen).
-function entferneDefektArten(text) {
-  return (text || "").split("\n").map((l) => l.trim()).filter((l) => l && !DEFEKT_OPTIONEN.includes(l)).join("\n");
-}
-
 function ausgewaehlteDefektNummern(h) {
   const lines = (h.besonderheiten || "").split("\n").map((l) => l.trim());
   return DEFEKT_OPTIONEN
@@ -2975,13 +2970,6 @@ function setupFormHandlers() {
       if (box) box.style.display = b.dataset.val === "defekt" ? "block" : "none";
       // Beim aktiven Umschalten auf "Defekt" direkt zur Auswahl aufklappen
       if (b.dataset.val === "defekt") setDefektChipsSichtbar(true);
-      // Auf "In Ordnung" gesetzt: angekreuzte Defekt-Arten entfernen, damit keine Defektmeldung stehen bleibt
-      if (b.dataset.val === "ok") {
-        form.querySelectorAll(".defekt-checkbox").forEach((cb) => { cb.checked = false; });
-        const ta = document.getElementById("f-bes");
-        if (ta) ta.value = entferneDefektArten(ta.value);
-        aktualisiereDefektZusammenfassung();
-      }
     });
   });
   applyZustandStyles(form);
@@ -3134,10 +3122,6 @@ function setupFormHandlers() {
       if (lageFotoDarfAendern) finalLageFoto = pendingLageFotoBlob;
     }
 
-    // "In Ordnung" darf keine Defekt-Meldung (Defekt-Arten, Foto zur Beschädigung) mehr mitführen.
-    const zustandNeu = document.getElementById("f-zustand").value;
-    const fotoNeu = pendingFotoBlob !== undefined ? pendingFotoBlob : (bestehend ? bestehend.foto : null);
-
     const h = {
       id: form.dataset.id,
       name, lat, lng,
@@ -3146,13 +3130,11 @@ function setupFormHandlers() {
       nrNeu, nrAlt, bezirk,
       lage: document.getElementById("f-lage").value.trim(),
       zustand: document.getElementById("f-zustand").value,
-      besonderheiten: zustandNeu === "ok"
-        ? entferneDefektArten(document.getElementById("f-bes").value)
-        : baueBesonderheiten(Array.from(form.querySelectorAll(".defekt-checkbox")).filter((c) => c.checked).map((c) => c.value), document.getElementById("f-bes").value),
+      besonderheiten: baueBesonderheiten(Array.from(form.querySelectorAll(".defekt-checkbox")).filter((c) => c.checked).map((c) => c.value), document.getElementById("f-bes").value),
       letzteKontrolle: document.getElementById("f-datum").value || todayStr(),
       geaendertVon: state.session,
       historie, // vollständige Änderungshistorie - wird nicht in der App angezeigt, nur exportiert
-      foto: zustandNeu === "ok" ? null : fotoNeu,
+      foto: pendingFotoBlob !== undefined ? pendingFotoBlob : (bestehend ? bestehend.foto : null),
       lageFoto: finalLageFoto,
     };
     const isNew = !state.hydranten.some((x) => x.id === h.id);
