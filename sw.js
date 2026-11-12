@@ -1,5 +1,5 @@
 /* Hydranten Feuerwehr Kleve – © 2026 Simone Loosen. Alle Rechte vorbehalten. Siehe LICENSE. */
-const CACHE_NAME = "hydranten-app-v45";
+const CACHE_NAME = "hydranten-app-v46";
 const PRECACHE_URLS = [
   "./",
   "./index.html",
