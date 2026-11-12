@@ -3234,7 +3234,7 @@ function exportHydrantenAlsExcel(hydrantenListe, dateiname, historieMap) {
   const rows = hydrantenListe.map((h) => ({
     Name: h.name, Einheit: h.einheit, HydrantennummerNeu: h.nrNeu, HydrantennummerAlt: h.nrAlt, Nennweite: h.durchfluss, Bezirk: h.bezirk,
     Breitengrad: h.lat, Laengengrad: h.lng,
-    Lage: h.lage, Zustand: zustandLabel(h.zustand), Besonderheiten: h.besonderheiten, LetzteKontrolle: h.letzteKontrolle, GeaendertVon: h.geaendertVon,
+    Lage: h.lage, Zustand: zustandLabel(h.zustand), Status: statusLabel(h), BedingtDefekt: (hatMangelBeiOk(h) || statusLabel(h) === "Bedingt defekt") ? "Ja" : "Nein", Besonderheiten: h.besonderheiten, LetzteKontrolle: h.letzteKontrolle, GeaendertVon: h.geaendertVon,
     Foto: h.foto instanceof Blob ? "Ja" : "Nein",
     LageFoto: h.lageFoto instanceof Blob ? "Ja" : "Nein",
   }));
