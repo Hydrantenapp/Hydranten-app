@@ -130,6 +130,21 @@ function baueBesonderheiten(angekreuzt, freitext) {
   return [...DEFEKT_OPTIONEN.filter((o) => gewaehlt.has(o)), ...rest].join("\n");
 }
 
+// Diese Defekt-Arten sind Mängel, die den Betrieb nicht verhindern: der Hydrant darf dabei "In Ordnung" bleiben.
+// Er wird dann grün mit gelbem Hinweis angezeigt und zählt weiterhin als "bedingt defekt" (Filter "Defekt").
+const DEFEKT_BEI_OK_NUMMERN = [1, 2, 3, 7, 9];
+function istMangelBeiOk(opt) { return DEFEKT_BEI_OK_NUMMERN.includes(parseInt(opt, 10)); }
+function hatMangelBeiOk(h) {
+  return h.zustand === "ok" && ausgewaehlteDefektNummern(h).some((n) => DEFEKT_BEI_OK_NUMMERN.includes(n));
+}
+// Entfernt alle Defekt-Arten, die mit "In Ordnung" nicht zusammenpassen (freier Text bleibt stehen).
+function behalteNurMaengelBeiOk(text) {
+  return (text || "").split("\n").map((l) => l.trim()).filter((l) => l && (!DEFEKT_OPTIONEN.includes(l) || istMangelBeiOk(l))).join("\n");
+}
+function mangelPillHTML() {
+  return `<span class="pill" style="color:#8A6D00;background:#FBF3D9;">⚠ Bedingt defekt</span>`;
+}
+
 function ausgewaehlteDefektNummern(h) {
   const lines = (h.besonderheiten || "").split("\n").map((l) => l.trim());
   return DEFEKT_OPTIONEN
@@ -839,7 +854,7 @@ function filteredList(ohneBezirk) {
   const q = state.search.trim().toLowerCase();
   let list = state.hydranten;
   if (q) list = list.filter((h) => passtZurSuche(h, q));
-  if (state.zustandFilter !== "alle") list = list.filter((h) => h.zustand === state.zustandFilter);
+  if (state.zustandFilter !== "alle") list = list.filter((h) => h.zustand === state.zustandFilter || (state.zustandFilter === "defekt" && hatMangelBeiOk(h)));
   if (!ohneBezirk && state.bezirkFilter !== "alle") list = list.filter((h) => (h.bezirk || "") === state.bezirkFilter);
   return withDistance(list);
 }
@@ -1043,12 +1058,13 @@ function hydrantRowHTML(h, opts) {
   const pillLabel = neutral ? "Nicht kontrolliert" : statusLabel(h);
   // Bei "Defekt" (und solange der Status nicht neutral ausgeblendet ist) wird nach dem Bezirk
   // zusätzlich angezeigt, welche konkrete(n) Defekt-Art(en) angekreuzt wurden.
-  const defektDetails = (!neutral && h.zustand === "defekt")
+  const mangelOk = !neutral && hatMangelBeiOk(h);
+  const defektDetails = (!neutral && (h.zustand === "defekt" || mangelOk))
     ? ausgewaehlteDefektNummern(h).map((n) => DEFEKT_OPTIONEN.find((opt) => opt.startsWith(n + "."))).filter(Boolean)
     : [];
   // Reihenfolge der Zeilen: Nummer (neu/alt) -> Defekt -> Bezirk · Einheit -> Lage
   const nrLine = [h.nrNeu ? `Nr. ${esc(h.nrNeu)}` : null, h.nrAlt ? `(alt: ${esc(h.nrAlt)})` : null].filter(Boolean).join(" ");
-  const defektHTML = defektDetails.length > 0 ? `<div class="hydrant-sub hydrant-sub-wrap" style="color:${pillFarbe.color};font-weight:600;">⚠ ${defektDetails.map(esc).join(", ")}</div>` : "";
+  const defektHTML = defektDetails.length > 0 ? `<div class="hydrant-sub hydrant-sub-wrap" style="color:${mangelOk ? "#8A6D00" : pillFarbe.color};font-weight:600;">⚠ ${defektDetails.map(esc).join(", ")}</div>` : "";
   const ortLine = [h.bezirk ? `Bez. ${esc(h.bezirk)}` : null, h.einheit ? esc(h.einheit) : null, h.durchfluss ? esc(h.durchfluss) : null].filter(Boolean).join(" · ");
   return `
   <button class="hydrant-row" ${attrName}="${h.id}">
@@ -1065,6 +1081,7 @@ function hydrantRowHTML(h, opts) {
     <div class="hydrant-meta">
       ${h.dist != null ? `<span class="dist">${fmtDist(h.dist)}</span>` : ""}
       <span class="pill" style="color:${pillFarbe.color};background:${pillFarbe.bg};">${esc(pillLabel)}</span>
+      ${mangelOk ? mangelPillHTML() : ""}
     </div>
   </button>`;
 }
@@ -1140,8 +1157,8 @@ function updateLeafletMarkers(list, neutralModus) {
       const neutral = neutralModus && zeigeNeutralInHk(h);
       const marker = L.circleMarker([h.lat, h.lng], {
         radius: 8,
-        color: "white",
-        weight: 2,
+        color: !neutral && hatMangelBeiOk(h) ? "#D9A400" : "white", // grün mit gelbem Rand = In Ordnung mit Mangel
+        weight: !neutral && hatMangelBeiOk(h) ? 4 : 2,
         fillColor: neutral ? "#D1D5DB" : kartenFarbeFuerHydrant(h),
         fillOpacity: 1,
       }).addTo(leafletMarkersLayer);
@@ -1606,9 +1623,9 @@ function renderForm(h) {
         </div>
         <input type="hidden" id="f-zustand" value="${h.zustand}" />
       </div>
-      <div id="defekt-optionen" class="field" style="display:${h.zustand === "defekt" ? "block" : "none"}">
+      <div id="defekt-optionen" class="field">
         <div style="display:flex;justify-content:space-between;align-items:center;">
-          <span class="lbl" style="margin-bottom:0;">Defekt-Art (Mehrfachauswahl möglich)</span>
+          <span class="lbl" id="defekt-lbl" style="margin-bottom:0;">${h.zustand === "defekt" ? "Defekt-Art (Mehrfachauswahl möglich)" : "Mängel trotz In Ordnung (Mehrfachauswahl möglich)"}</span>
           <button type="button" id="btn-toggle-defekt" class="btn btn-ghost" style="padding:4px 10px;font-size:11px;">Anzeigen</button>
         </div>
         <div id="defekt-zusammenfassung" style="font-size:12.5px;color:#6b7280;margin-top:4px;">
@@ -1619,7 +1636,7 @@ function renderForm(h) {
         </div>
         <div id="defekt-chips-box" class="defekt-chips" style="display:none;margin-top:8px;">
           ${DEFEKT_OPTIONEN.map((opt) => `
-            <label class="defekt-chip">
+            <label class="defekt-chip" style="${h.zustand !== "defekt" && !istMangelBeiOk(opt) ? "display:none;" : ""}">
               <input type="checkbox" class="defekt-checkbox" value="${esc(opt)}" ${(h.besonderheiten || "").split("\n").map((l) => l.trim()).includes(opt) ? "checked" : ""} />
               ${esc(opt)}
             </label>`).join("")}
@@ -1670,7 +1687,10 @@ function renderDetail(h) {
             ${h.einheit ? `${esc(h.einheit)} · ` : ""}${h.durchfluss ? `${esc(h.durchfluss)} · ` : ""}${h.nrNeu ? `Nr. ${esc(h.nrNeu)}` : "keine neue Nr."}${h.nrAlt ? ` · alt: ${esc(h.nrAlt)}` : ""}${h.bezirk ? ` · Bezirk ${esc(h.bezirk)}` : ""}
           </p>
         </div>
-        <span class="pill" style="color:${statusPillFarben(h).color};background:${statusPillFarben(h).bg};">${esc(statusLabel(h))}</span>
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">
+          <span class="pill" style="color:${statusPillFarben(h).color};background:${statusPillFarben(h).bg};">${esc(statusLabel(h))}</span>
+          ${hatMangelBeiOk(h) ? mangelPillHTML() : ""}
+        </div>
       </div>
       ${dist != null ? `<p style="color:#A72920;font-weight:600;font-size:14px;margin:10px 0 0;">${fmtDist(dist)} von deinem Standort entfernt</p>` : ""}
       <p class="mono" style="margin:8px 0 0;">${typeof h.lat === "number" && typeof h.lng === "number" ? `${h.lat.toFixed(6)}, ${h.lng.toFixed(6)}` : "📍 Keine Koordinaten hinterlegt – über \"Bearbeiten\" → \"Aktuellen Standort verwenden\" ergänzen"}</p>
@@ -2948,6 +2968,25 @@ function setupFormHandlers() {
       : "Noch keine Defekt-Art ausgewählt.";
   }
 
+  // Bei "In Ordnung" sind nur Mängel wählbar, die den Betrieb nicht verhindern (1, 2, 3, 7, 9); die übrigen
+  // Defekt-Arten werden dabei abgewählt und aus dem Text entfernt. Bei "Defekt" sind alle wählbar.
+  function passeDefektBoxAn(zustand) {
+    const nurMaengel = zustand !== "defekt";
+    const lbl = document.getElementById("defekt-lbl");
+    if (lbl) lbl.textContent = nurMaengel ? "Mängel trotz In Ordnung (Mehrfachauswahl möglich)" : "Defekt-Art (Mehrfachauswahl möglich)";
+    form.querySelectorAll(".defekt-chip").forEach((chip) => {
+      const cb = chip.querySelector(".defekt-checkbox");
+      const erlaubt = !nurMaengel || istMangelBeiOk(cb.value);
+      chip.style.display = erlaubt ? "" : "none";
+      if (!erlaubt) cb.checked = false;
+    });
+    if (nurMaengel) {
+      const ta = document.getElementById("f-bes");
+      if (ta) ta.value = behalteNurMaengelBeiOk(ta.value);
+    }
+    aktualisiereDefektZusammenfassung();
+  }
+
   function setDefektChipsSichtbar(sichtbar) {
     if (!chipsBox || !toggleBtn) return;
     chipsBox.style.display = sichtbar ? "flex" : "none";
@@ -2966,8 +3005,7 @@ function setupFormHandlers() {
       b.dataset.active = "true";
       document.getElementById("f-zustand").value = b.dataset.val;
       applyZustandStyles(form);
-      const box = document.getElementById("defekt-optionen");
-      if (box) box.style.display = b.dataset.val === "defekt" ? "block" : "none";
+      passeDefektBoxAn(b.dataset.val);
       // Beim aktiven Umschalten auf "Defekt" direkt zur Auswahl aufklappen
       if (b.dataset.val === "defekt") setDefektChipsSichtbar(true);
     });
@@ -3122,6 +3160,15 @@ function setupFormHandlers() {
       if (lageFotoDarfAendern) finalLageFoto = pendingLageFotoBlob;
     }
 
+    // "In Ordnung" darf nur Mängel mitführen, die den Betrieb nicht verhindern (1, 2, 3, 7, 9).
+    const zustandNeu = document.getElementById("f-zustand").value;
+    const angekreuzt = Array.from(form.querySelectorAll(".defekt-checkbox")).filter((c) => c.checked).map((c) => c.value);
+    const besonderheitenNeu = zustandNeu === "ok"
+      ? baueBesonderheiten(angekreuzt.filter(istMangelBeiOk), behalteNurMaengelBeiOk(document.getElementById("f-bes").value))
+      : baueBesonderheiten(angekreuzt, document.getElementById("f-bes").value);
+    const fotoNeu = pendingFotoBlob !== undefined ? pendingFotoBlob : (bestehend ? bestehend.foto : null);
+    const bleibtMangel = zustandNeu === "ok" && besonderheitenNeu.split("\n").some((l) => DEFEKT_OPTIONEN.includes(l.trim()));
+
     const h = {
       id: form.dataset.id,
       name, lat, lng,
@@ -3129,12 +3176,13 @@ function setupFormHandlers() {
       durchfluss: durchflussRaw ? `H-${durchflussRaw}` : "",
       nrNeu, nrAlt, bezirk,
       lage: document.getElementById("f-lage").value.trim(),
-      zustand: document.getElementById("f-zustand").value,
-      besonderheiten: baueBesonderheiten(Array.from(form.querySelectorAll(".defekt-checkbox")).filter((c) => c.checked).map((c) => c.value), document.getElementById("f-bes").value),
+      zustand: zustandNeu,
+      besonderheiten: besonderheitenNeu,
       letzteKontrolle: document.getElementById("f-datum").value || todayStr(),
       geaendertVon: state.session,
       historie, // vollständige Änderungshistorie - wird nicht in der App angezeigt, nur exportiert
-      foto: pendingFotoBlob !== undefined ? pendingFotoBlob : (bestehend ? bestehend.foto : null),
+      // Das Foto zur Beschädigung entfällt, wenn "In Ordnung" ohne verbleibenden Mangel gespeichert wird.
+      foto: zustandNeu === "ok" && !bleibtMangel ? null : fotoNeu,
       lageFoto: finalLageFoto,
     };
     const isNew = !state.hydranten.some((x) => x.id === h.id);
