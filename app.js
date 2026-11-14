@@ -2660,7 +2660,19 @@ function attachHandlers() {
     if (btnHelfer) btnHelfer.addEventListener("click", holeHelferNachtrag);
     if (document.getElementById("praesenz-karte")) {
       const btnPr = document.getElementById("btn-praesenz-neu");
-      if (btnPr) btnPr.addEventListener("click", ladePraesenz);
+      if (btnPr) btnPr.addEventListener("click", async () => {
+        const inh = document.getElementById("praesenz-inhalt");
+        const alt = btnPr.textContent;
+        btnPr.disabled = true; btnPr.textContent = "Lädt…";
+        if (inh) inh.style.opacity = "0.4";
+        const start = Date.now();
+        await ladePraesenz();
+        const rest = 600 - (Date.now() - start);
+        if (rest > 0) await new Promise((r) => setTimeout(r, rest));
+        if (inh) inh.style.opacity = "";
+        btnPr.disabled = false; btnPr.textContent = alt;
+        showToast("Aktualisiert · " + new Date().toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit", second: "2-digit" }));
+      });
       ladePraesenz();
       clearInterval(praesenzAnzeigeTimer);
       praesenzAnzeigeTimer = setInterval(() => {
