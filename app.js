@@ -3590,13 +3590,20 @@ async function ladePraesenz() {
   const { data, error } = await sb.from("praesenz").select("einheit, client_id").gte("zuletzt", seit);
   if (!document.getElementById("praesenz-inhalt")) return;
   if (error) { console.error(error); el.textContent = "Anzeige konnte nicht geladen werden."; return; }
-  const kameraden = (data || []).filter((r) => r.einheit !== "App-Admin");
-  if (!kameraden.length) { el.innerHTML = "Im Moment ist niemand angemeldet."; return; }
+  const alle = (data || []).filter((r) => r.einheit !== "App-Admin");
+  const hyd = alle.filter((r) => r.einheit !== "Erfassung");
+  const erf = alle.filter((r) => r.einheit === "Erfassung");
+  if (!alle.length) { el.innerHTML = "Im Moment ist niemand angemeldet."; return; }
+  const geraete = (n) => `${n} ${n === 1 ? "Gerät" : "Geräte"}`;
+  const kopf = (titel, n) => `<div style="display:flex;justify-content:space-between;font-size:14px;color:#1f2937;margin:10px 0 4px;"><b>${titel}</b><b>${geraete(n)}</b></div>`;
   const je = {};
-  kameraden.forEach((r) => { je[r.einheit] = (je[r.einheit] || 0) + 1; });
-  const anzeigeName = (e) => (e === "Erfassung" ? "Erfassungs-App (Helfer)" : e);
-  const zeilen = Object.keys(je).sort((a, b) => (a === "Erfassung") - (b === "Erfassung") || a.localeCompare(b, "de")).map((e) => `<div style="display:flex;justify-content:space-between;"><span>${esc(anzeigeName(e))}</span><b style="color:#1f2937;">${je[e]}</b></div>`).join("");
-  el.innerHTML = `<div style="font-size:15px;color:#1f2937;margin-bottom:6px;"><b>${kameraden.length}</b> ${kameraden.length === 1 ? "Gerät" : "Geräte"} online</div>${zeilen}`;
+  hyd.forEach((r) => { je[r.einheit] = (je[r.einheit] || 0) + 1; });
+  const zeilen = Object.keys(je).sort((a, b) => a.localeCompare(b, "de")).map((e) => `<div style="display:flex;justify-content:space-between;padding-left:8px;"><span>${esc(e)}</span><span>${je[e]}</span></div>`).join("");
+  let html = kopf("Hydranten-App", hyd.length);
+  html += hyd.length ? zeilen : `<div style="padding-left:8px;">niemand angemeldet</div>`;
+  html += kopf("Erfassungs-App (Helfer)", erf.length);
+  if (!erf.length) html += `<div style="padding-left:8px;">niemand angemeldet</div>`;
+  el.innerHTML = html;
 }
 
 /* Offene Nachträge der Helfer vom Server holen und übernehmen */
