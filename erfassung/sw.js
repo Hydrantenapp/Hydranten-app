@@ -1,6 +1,6 @@
 /* Hydranten Erfassung – © 2026 Simone Loosen. Alle Rechte vorbehalten. Siehe LICENSE. */
 // Eigener Service Worker nur für den Ordner /erfassung/ - berührt die Hauptapp nicht.
-const CACHE_NAME = "hydranten-erfassung-v20";
+const CACHE_NAME = "hydranten-erfassung-v21";
 const PRECACHE_URLS = [
   "./", "./index.html", "./styles.css", "./app.js", "./manifest.json",
   "./icons/icon-32.png", "./icons/icon-180.png", "./icons/icon-192.png", "./icons/icon-512.png",
