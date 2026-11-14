@@ -3582,7 +3582,8 @@ async function ladePraesenz() {
   if (!kameraden.length) { el.innerHTML = "Im Moment ist niemand angemeldet."; return; }
   const je = {};
   kameraden.forEach((r) => { je[r.einheit] = (je[r.einheit] || 0) + 1; });
-  const zeilen = Object.keys(je).sort((a, b) => a.localeCompare(b, "de")).map((e) => `<div style="display:flex;justify-content:space-between;"><span>${esc(e)}</span><b style="color:#1f2937;">${je[e]}</b></div>`).join("");
+  const anzeigeName = (e) => (e === "Erfassung" ? "Erfassungs-App (Helfer)" : e);
+  const zeilen = Object.keys(je).sort((a, b) => (a === "Erfassung") - (b === "Erfassung") || a.localeCompare(b, "de")).map((e) => `<div style="display:flex;justify-content:space-between;"><span>${esc(anzeigeName(e))}</span><b style="color:#1f2937;">${je[e]}</b></div>`).join("");
   el.innerHTML = `<div style="font-size:15px;color:#1f2937;margin-bottom:6px;"><b>${kameraden.length}</b> ${kameraden.length === 1 ? "Gerät" : "Geräte"} online</div>${zeilen}`;
 }
 

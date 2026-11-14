@@ -591,14 +591,29 @@ function bindLogin() {
     const { error } = await state.sb.auth.signInWithPassword({ email: HELFER_EMAIL, password: pass });
     if (error) { $("btn-login").disabled = false; $("l-fehler").textContent = /invalid/i.test(error.message) ? "Passwort stimmt nicht." : "Anmeldung nicht möglich: " + error.message; return; }
     await setMeta("helfer", name); await setMeta("angemeldet", true); await setMeta("lokal", false);
-    render(); syncen(false);
+    render(); syncen(false); praesenzMelden();
   };
 }
 async function abmelden() {
   if (ungesendet() > 0 && !confirm(`${ungesendet()} Erfassung(en) sind noch nicht gesendet und bleiben auf dem Gerät. Trotzdem abmelden?`)) return;
+  try { await mitZeitlimit(state.sb.rpc("praesenz_abmelden", { p_client: praesenzId() }), 2000); } catch (e) {}
   try { await state.sb.auth.signOut(); } catch (e) {}
   await setMeta("angemeldet", false);
   render();
+}
+
+/* ---------- Präsenz: meldet dem App-Admin nur "ein Gerät ist gerade online" (keine Namen) ---------- */
+let praesenzFallbackId = null;
+function praesenzId() {
+  try {
+    let id = localStorage.getItem("praesenzClientIdErf");
+    if (!id) { id = crypto.randomUUID(); localStorage.setItem("praesenzClientIdErf", id); }
+    return id;
+  } catch (e) { return praesenzFallbackId || (praesenzFallbackId = crypto.randomUUID()); }
+}
+async function praesenzMelden() {
+  if (!angemeldet() || !state.sb || !navigator.onLine || document.hidden) return;
+  try { await state.sb.rpc("praesenz_melden", { p_client: praesenzId() }); } catch (e) {}
 }
 
 /* ---------- Abgleich mit dem Server ---------- */
@@ -671,7 +686,10 @@ document.addEventListener("visibilitychange", () => { if (document.visibilitySta
     return;
   }
   try { state.sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: true, autoRefreshToken: true } }); } catch (e) { console.warn("Supabase nicht geladen", e); }
-  window.addEventListener("online", () => syncen(false));
+  window.addEventListener("online", () => { syncen(false); praesenzMelden(); });
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) praesenzMelden(); });
+  setInterval(praesenzMelden, 60000);
+  praesenzMelden();
   document.getElementById("liste-file").addEventListener("change", (e) => { const f = e.target.files[0]; if (f) ladeListe(f); e.target.value = ""; });
   render();
   syncen(false);
