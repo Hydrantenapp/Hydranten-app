@@ -1845,6 +1845,14 @@ function renderDatenAppAdmin() {
     <p style="font-size:13px;color:#6b7280;margin:0 0 16px;">${state.hydranten.length} Hydranten lokal gespeichert. Abschnitt antippen zum Auf-/Zuklappen.</p>
 
     <div style="margin-bottom:12px;">
+    <div class="card" id="praesenz-karte" style="box-shadow:none;border:1px solid #e5e7eb;margin-bottom:12px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+        <div style="font-weight:600;font-size:14px;">🟢 Gerade online</div>
+        <button type="button" id="btn-praesenz-neu" class="btn btn-outline" style="padding:4px 10px;font-size:12px;">Aktualisieren</button>
+      </div>
+      <div id="praesenz-inhalt" style="font-size:13px;color:#6b7280;margin-top:8px;">Lädt…</div>
+      <div style="font-size:11px;color:#9CA3AF;margin-top:6px;line-height:1.4;">Gezählt werden Geräte mit geöffneter App in den letzten 2–3 Minuten. Alle Kameraden einer Einheit nutzen denselben Zugang, einzelne Personen sind daher nicht erkennbar. Namen werden nicht gespeichert.</div>
+    </div>
     <div class="card" style="box-shadow:none;border:1px solid #e5e7eb;">
       <div style="display:flex;gap:12px;align-items:center;margin-bottom:12px;">
         <div class="hydrant-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
@@ -2650,6 +2658,15 @@ function attachHandlers() {
     if (btnNachtrag) btnNachtrag.addEventListener("click", () => document.getElementById("nachtrag-file").click());
     const btnHelfer = document.getElementById("btn-helfer-nachtrag");
     if (btnHelfer) btnHelfer.addEventListener("click", holeHelferNachtrag);
+    if (document.getElementById("praesenz-karte")) {
+      const btnPr = document.getElementById("btn-praesenz-neu");
+      if (btnPr) btnPr.addEventListener("click", ladePraesenz);
+      ladePraesenz();
+      clearInterval(praesenzAnzeigeTimer);
+      praesenzAnzeigeTimer = setInterval(() => {
+        if (document.getElementById("praesenz-karte")) ladePraesenz(); else clearInterval(praesenzAnzeigeTimer);
+      }, 30000);
+    }
     const btnLink = document.getElementById("btn-erfassung-link");
     if (btnLink) btnLink.addEventListener("click", teileErfassungsLink);
     const btnTiles = document.getElementById("btn-download-tiles");
@@ -3522,6 +3539,53 @@ async function teileErfassungsLink() {
   showToast(ok ? "Link kopiert, jetzt in Mail oder Messenger einfügen" : "Kopieren nicht möglich: " + link);
 }
 
+/* ---------- Präsenz: wer ist gerade online (nur Zählung je Einheit, keine Namen) ---------- */
+let praesenzTimer = null;
+let praesenzAnzeigeTimer = null;
+let praesenzIdFallback = null;
+function praesenzClientId() {
+  try {
+    let id = localStorage.getItem("praesenzClientId");
+    if (!id) { id = crypto.randomUUID(); localStorage.setItem("praesenzClientId", id); }
+    return id;
+  } catch (e) {
+    if (!praesenzIdFallback) praesenzIdFallback = crypto.randomUUID();
+    return praesenzIdFallback;
+  }
+}
+async function praesenzMelden() {
+  if (!sb || !state.session || !navigator.onLine || document.hidden) return;
+  try { await sb.rpc("praesenz_melden", { p_client: praesenzClientId() }); } catch (e) {}
+}
+function starteHerzschlag() {
+  clearInterval(praesenzTimer);
+  praesenzMelden();
+  praesenzTimer = setInterval(praesenzMelden, 60000);
+}
+async function stoppeHerzschlag() {
+  clearInterval(praesenzTimer);
+  praesenzTimer = null;
+  if (sb && navigator.onLine) { try { await sb.rpc("praesenz_abmelden", { p_client: praesenzClientId() }); } catch (e) {} }
+}
+document.addEventListener("visibilitychange", () => { if (!document.hidden && praesenzTimer) praesenzMelden(); });
+
+async function ladePraesenz() {
+  const el = document.getElementById("praesenz-inhalt");
+  if (!el) return;
+  if (state.session !== "App-Admin") return;
+  if (!sb || !navigator.onLine) { el.textContent = "Dafür ist eine Internetverbindung nötig."; return; }
+  const seit = new Date(Date.now() - 150 * 1000).toISOString();
+  const { data, error } = await sb.from("praesenz").select("einheit, client_id").gte("zuletzt", seit);
+  if (!document.getElementById("praesenz-inhalt")) return;
+  if (error) { console.error(error); el.textContent = "Anzeige konnte nicht geladen werden."; return; }
+  const kameraden = (data || []).filter((r) => r.einheit !== "App-Admin");
+  if (!kameraden.length) { el.innerHTML = "Im Moment ist niemand angemeldet."; return; }
+  const je = {};
+  kameraden.forEach((r) => { je[r.einheit] = (je[r.einheit] || 0) + 1; });
+  const zeilen = Object.keys(je).sort((a, b) => a.localeCompare(b, "de")).map((e) => `<div style="display:flex;justify-content:space-between;"><span>${esc(e)}</span><b style="color:#1f2937;">${je[e]}</b></div>`).join("");
+  el.innerHTML = `<div style="font-size:15px;color:#1f2937;margin-bottom:6px;"><b>${kameraden.length}</b> ${kameraden.length === 1 ? "Gerät" : "Geräte"} online</div>${zeilen}`;
+}
+
 /* Offene Nachträge der Helfer vom Server holen und übernehmen */
 async function holeHelferNachtrag() {
   if (state.session !== "App-Admin") { showToast("Nur für den App-Admin verfügbar"); return; }
@@ -4030,6 +4094,7 @@ async function stelleSitzungWiederHer() {
 
 async function handleLogout() {
   try { await Promise.race([syncAlles(), new Promise((r) => setTimeout(r, 3000))]); } catch (e) {}
+  try { await Promise.race([stoppeHerzschlag(), new Promise((r) => setTimeout(r, 1500))]); } catch (e) {}
   if (sb) sb.auth.signOut().catch(() => {});
   try { localStorage.removeItem(ROLLE_CACHE_KEY); } catch (e) {}
   state.session = null;
@@ -4061,6 +4126,7 @@ function showApp() {
   const badge = document.getElementById("role-badge");
   badge.textContent = isSonderrolle(state.session) ? `🛡 ${state.session} · Vollzugriff` : `${state.session} · eigene Hydranten bearbeitbar`;
   state.karteEinheit = isSonderrolle(state.session) ? "alle" : state.session;
+  starteHerzschlag();
 
   const erfassenNavBtn = document.querySelector('.nav-item[data-tab="hinzufuegen"]');
   if (erfassenNavBtn) erfassenNavBtn.classList.toggle("hidden", !hatErfassenZugriff(state.session));
