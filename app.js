@@ -3593,7 +3593,6 @@ async function ladePraesenz() {
   const alle = (data || []).filter((r) => r.einheit !== "App-Admin");
   const hyd = alle.filter((r) => r.einheit !== "Erfassung");
   const erf = alle.filter((r) => r.einheit === "Erfassung");
-  if (!alle.length) { el.innerHTML = "Im Moment ist niemand angemeldet."; return; }
   const geraete = (n) => `${n} ${n === 1 ? "Gerät" : "Geräte"}`;
   const kopf = (titel, n) => `<div style="display:flex;justify-content:space-between;font-size:14px;color:#1f2937;margin:10px 0 4px;"><b>${titel}</b><b>${geraete(n)}</b></div>`;
   const je = {};
