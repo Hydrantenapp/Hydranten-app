@@ -1863,7 +1863,8 @@ function renderDatenAppAdmin() {
       </div>
       <button id="btn-helfer-nachtrag" class="btn btn-outline btn-full">Offene Nachträge abholen</button>
       <button id="btn-erfassung-link" class="btn btn-outline btn-full" style="margin-top:8px;">Link zur Erfassungs-App teilen</button>
-      <div style="font-size:11px;color:#9CA3AF;margin-top:6px;line-height:1.4;">Das Helfer-Passwort wird nicht mitgesendet. Gib es den Helfern separat weiter.</div>
+      <button id="btn-haupt-link" class="btn btn-outline btn-full" style="margin-top:8px;">Link zur Hydranten-App teilen</button>
+      <div style="font-size:11px;color:#9CA3AF;margin-top:6px;line-height:1.4;">Passwörter werden nicht mitgesendet. Gib sie separat weiter.</div>
     </div>
     </div>
     ${statistikAbschnittHTML("adminDaten", "📁 Daten", null, datenInhalt)}
@@ -2681,6 +2682,8 @@ function attachHandlers() {
     }
     const btnLink = document.getElementById("btn-erfassung-link");
     if (btnLink) btnLink.addEventListener("click", teileErfassungsLink);
+    const btnHauptLink = document.getElementById("btn-haupt-link");
+    if (btnHauptLink) btnHauptLink.addEventListener("click", teileHauptLink);
     const btnTiles = document.getElementById("btn-download-tiles");
     if (btnTiles) btnTiles.addEventListener("click", downloadTiles);
     const btnArchivJetzt = document.getElementById("btn-archiv-jetzt");
@@ -3546,6 +3549,17 @@ async function teileErfassungsLink() {
   const text = `Hydranten Erfassung der Feuerwehr Kleve: Position und Nennweite erfassen.\n${link}\nDas Passwort bekommst du separat.`;
   if (navigator.share) {
     try { await navigator.share({ title: "Hydranten Erfassung", text }); return; } catch (e) { if (e && e.name === "AbortError") return; }
+  }
+  const ok = await textKopieren(text);
+  showToast(ok ? "Link kopiert, jetzt in Mail oder Messenger einfügen" : "Kopieren nicht möglich: " + link);
+}
+
+/* Link zur Hydranten-App (Hauptseite) weitergeben */
+async function teileHauptLink() {
+  const link = location.origin + "/";
+  const text = `Hydranten-App der Feuerwehr Kleve: Hydranten ansehen, Zustand melden.\n${link}\nDie Zugangsdaten bekommst du separat.`;
+  if (navigator.share) {
+    try { await navigator.share({ title: "Hydranten-App Feuerwehr Kleve", text }); return; } catch (e) { if (e && e.name === "AbortError") return; }
   }
   const ok = await textKopieren(text);
   showToast(ok ? "Link kopiert, jetzt in Mail oder Messenger einfügen" : "Kopieren nicht möglich: " + link);
