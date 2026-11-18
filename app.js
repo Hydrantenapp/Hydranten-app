@@ -1864,6 +1864,7 @@ function renderDatenAppAdmin() {
       <button id="btn-helfer-nachtrag" class="btn btn-outline btn-full">Offene Nachträge abholen</button>
       <button id="btn-erfassung-link" class="btn btn-outline btn-full" style="margin-top:8px;">Link zur Erfassungs-App teilen</button>
       <button id="btn-haupt-link" class="btn btn-outline btn-full" style="margin-top:8px;">Link zur Hydranten-App teilen</button>
+      <button id="btn-install-link" class="btn btn-outline btn-full" style="margin-top:8px;">Installations-Link mit Anleitung teilen</button>
       <div style="font-size:11px;color:#9CA3AF;margin-top:6px;line-height:1.4;">Passwörter werden nicht mitgesendet. Gib sie separat weiter.</div>
     </div>
     </div>
@@ -2683,7 +2684,9 @@ function attachHandlers() {
     const btnLink = document.getElementById("btn-erfassung-link");
     if (btnLink) btnLink.addEventListener("click", teileErfassungsLink);
     const btnHauptLink = document.getElementById("btn-haupt-link");
-    if (btnHauptLink) btnHauptLink.addEventListener("click", teileHauptLink);
+    if (btnHauptLink) btnHauptLink.addEventListener("click", () => teileHauptLink(false));
+    const btnInstallLink = document.getElementById("btn-install-link");
+    if (btnInstallLink) btnInstallLink.addEventListener("click", () => teileHauptLink(true));
     const btnTiles = document.getElementById("btn-download-tiles");
     if (btnTiles) btnTiles.addEventListener("click", downloadTiles);
     const btnArchivJetzt = document.getElementById("btn-archiv-jetzt");
@@ -3555,9 +3558,11 @@ async function teileErfassungsLink() {
 }
 
 /* Link zur Hydranten-App (Hauptseite) weitergeben */
-async function teileHauptLink() {
+async function teileHauptLink(mitInstallation) {
   const link = location.origin + "/";
-  const text = `Hydranten-App der Feuerwehr Kleve: Hydranten ansehen, Zustand melden.\n${link}\nDie Zugangsdaten bekommst du separat.`;
+  const text = mitInstallation
+    ? `Hydranten-App der Feuerwehr Kleve\n${link}\n\nInstallieren:\n- Android (Chrome): Link öffnen, Menü (drei Punkte) > "App installieren" oder "Zum Startbildschirm hinzufügen".\n- iPhone (Safari): Link öffnen, Teilen-Symbol > "Zum Home-Bildschirm".\n\nDie Zugangsdaten bekommst du separat.`
+    : `Hydranten-App der Feuerwehr Kleve: Hydranten ansehen, Zustand melden.\n${link}\nDie Zugangsdaten bekommst du separat.`;
   if (navigator.share) {
     try { await navigator.share({ title: "Hydranten-App Feuerwehr Kleve", text }); return; } catch (e) { if (e && e.name === "AbortError") return; }
   }
