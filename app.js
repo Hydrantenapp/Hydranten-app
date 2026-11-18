@@ -1862,9 +1862,18 @@ function renderDatenAppAdmin() {
         </div>
       </div>
       <button id="btn-helfer-nachtrag" class="btn btn-outline btn-full">Offene Nachträge abholen</button>
-      <button id="btn-erfassung-link" class="btn btn-outline btn-full" style="margin-top:8px;">Link zur Erfassungs-App teilen</button>
-      <button id="btn-haupt-link" class="btn btn-outline btn-full" style="margin-top:8px;">Link zur Hydranten-App teilen</button>
+    </div>
+    <div class="card" id="links-karte" style="box-shadow:none;border:1px solid #e5e7eb;margin-top:12px;">
+      <div style="display:flex;gap:12px;align-items:center;margin-bottom:12px;">
+        <div class="hydrant-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></svg></div>
+        <div>
+          <div style="font-weight:600;font-size:14px;">Apps weitergeben</div>
+          <div style="font-size:12px;color:#6b7280;">Links zu den Apps per Mail oder Messenger verschicken.</div>
+        </div>
+      </div>
+      <button id="btn-haupt-link" class="btn btn-outline btn-full">Link zur Hydranten-App teilen</button>
       <button id="btn-install-link" class="btn btn-outline btn-full" style="margin-top:8px;">Installations-Link mit Anleitung teilen</button>
+      <button id="btn-erfassung-link" class="btn btn-outline btn-full" style="margin-top:8px;">Link zur Erfassungs-App teilen</button>
       <div style="font-size:11px;color:#9CA3AF;margin-top:6px;line-height:1.4;">Passwörter werden nicht mitgesendet. Gib sie separat weiter.</div>
     </div>
     </div>
