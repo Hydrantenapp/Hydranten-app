@@ -4087,6 +4087,81 @@ function renderLoginScreen() {
   document.getElementById("login-user").addEventListener("keydown", (e) => { if (e.key === "Enter") document.getElementById("login-pass").focus(); });
 }
 
+/* ---------- Zwei-Faktor-Anmeldung (nur App-Admin, nur in der App; Code aus Authenticator-App) ---------- */
+function mfaKarte(html) {
+  const card = document.querySelector("#login-screen .login-card");
+  if (card) card.innerHTML = html;
+  return card;
+}
+function mfaCodeAbfragen(factorId, einrichtung) {
+  return new Promise((resolve) => {
+    const kopf = einrichtung
+      ? `<div class="login-title">Zwei-Faktor einrichten</div>
+         <div class="login-sub">1. Authenticator-App öffnen (z. B. Google oder Microsoft Authenticator)<br>2. QR-Code scannen<br>3. Den angezeigten 6-stelligen Code unten eingeben</div>
+         <div style="text-align:center;margin:10px 0;"><img src="${einrichtung.qr}" alt="QR-Code" style="width:180px;height:180px;background:#fff;" /></div>
+         <div style="font-size:11px;color:#6b7280;text-align:center;word-break:break-all;">Falls das Scannen nicht klappt, diesen Schlüssel eintippen:<br><b>${einrichtung.secret}</b></div>`
+      : `<div class="login-title">Zwei-Faktor-Anmeldung</div>
+         <div class="login-sub">Code aus der Authenticator-App eingeben</div>`;
+    mfaKarte(`${kopf}
+      <div class="field" style="margin-top:12px;"><span class="lbl">6-stelliger Code</span>
+        <input type="text" id="mfa-code" inputmode="numeric" autocomplete="one-time-code" maxlength="8" placeholder="123456" /></div>
+      <p id="mfa-error" class="error-text"></p>
+      <button id="mfa-ok" class="btn btn-primary btn-full" style="margin-top:6px;">Bestätigen</button>
+      <button id="mfa-abbruch" class="btn btn-outline btn-full" style="margin-top:8px;">Abbrechen</button>`);
+    const codeEl = document.getElementById("mfa-code");
+    const errEl = document.getElementById("mfa-error");
+    const okBtn = document.getElementById("mfa-ok");
+    const pruefen = async () => {
+      const code = (codeEl.value || "").replace(/\s/g, "");
+      if (!/^\d{6}$/.test(code)) { errEl.textContent = "Bitte den 6-stelligen Code eingeben."; return; }
+      okBtn.disabled = true; errEl.textContent = "";
+      const { error } = await sb.auth.mfa.challengeAndVerify({ factorId, code });
+      if (error) { errEl.textContent = "Code falsch oder abgelaufen. Bitte den aktuellen Code eingeben."; okBtn.disabled = false; codeEl.value = ""; codeEl.focus(); return; }
+      resolve(true);
+    };
+    okBtn.addEventListener("click", pruefen);
+    codeEl.addEventListener("keydown", (e) => { if (e.key === "Enter") pruefen(); });
+    document.getElementById("mfa-abbruch").addEventListener("click", async () => {
+      if (einrichtung) { try { await sb.auth.mfa.unenroll({ factorId }); } catch (e) {} }
+      resolve(false);
+    });
+    codeEl.focus();
+  });
+}
+async function mfaEinrichtenAnbieten() {
+  const wahl = await new Promise((resolve) => {
+    mfaKarte(`<div class="login-title">Zwei-Faktor-Anmeldung</div>
+      <div class="login-sub">Für den App-Admin empfohlen: zusätzlich zum Passwort ein Code aus einer Authenticator-App.</div>
+      <button id="mfa-jetzt" class="btn btn-primary btn-full" style="margin-top:12px;">Jetzt einrichten</button>
+      <button id="mfa-spaeter" class="btn btn-outline btn-full" style="margin-top:8px;">Später</button>`);
+    document.getElementById("mfa-jetzt").addEventListener("click", () => resolve(true));
+    document.getElementById("mfa-spaeter").addEventListener("click", () => resolve(false));
+  });
+  if (!wahl) return true; // ohne Zwei-Faktor weiter
+  const { data, error } = await sb.auth.mfa.enroll({ factorType: "totp", friendlyName: "Hydranten-App " + Date.now() });
+  if (error || !data || !data.totp) {
+    await new Promise((resolve) => {
+      mfaKarte(`<div class="login-title">Einrichtung nicht möglich</div>
+        <div class="login-sub">${esc(error ? error.message : "Unbekannter Fehler")}</div>
+        <button id="mfa-weiter" class="btn btn-primary btn-full" style="margin-top:12px;">Ohne Zwei-Faktor weiter</button>`);
+      document.getElementById("mfa-weiter").addEventListener("click", resolve);
+    });
+    return true;
+  }
+  return mfaCodeAbfragen(data.id, { qr: data.totp.qr_code, secret: data.totp.secret });
+}
+// true = Anmeldung darf weitergehen
+async function mfaDurchlaufen() {
+  const { data: aal, error } = await sb.auth.mfa.getAuthenticatorAssuranceLevel();
+  if (error) throw error;
+  if (aal.currentLevel === "aal2") return true;
+  const { data: fl, error: e2 } = await sb.auth.mfa.listFactors();
+  if (e2) throw e2;
+  const faktor = (fl.totp || []).find((f) => f.status === "verified");
+  if (faktor) return mfaCodeAbfragen(faktor.id, null);
+  return mfaEinrichtenAnbieten();
+}
+
 async function handleLogin() {
   const user = document.getElementById("login-user").value;
   const pass = document.getElementById("login-pass").value;
@@ -4104,6 +4179,16 @@ async function handleLogin() {
     }
     const rolle = await ladeRolleVonServer(data.user.id);
     if (!rolle) { await sb.auth.signOut(); errEl.textContent = "Diesem Konto ist keine Rolle zugewiesen."; return; }
+    if (rolle === "App-Admin") {
+      let ok = false;
+      try { ok = await mfaDurchlaufen(); } catch (e) { ok = false; }
+      if (!ok) {
+        await sb.auth.signOut().catch(() => {});
+        renderLoginScreen();
+        document.getElementById("login-error").textContent = "Zwei-Faktor-Anmeldung nicht abgeschlossen.";
+        return;
+      }
+    }
     try { localStorage.setItem(ROLLE_CACHE_KEY, rolle); } catch (e) {}
     state.session = rolle;
     showApp();
@@ -4123,6 +4208,13 @@ async function stelleSitzungWiederHer() {
     let rolle = null;
     try { rolle = await ladeRolleVonServer(data.session.user.id); } catch (e) {
       try { rolle = localStorage.getItem(ROLLE_CACHE_KEY); } catch (e2) {}  // offline: zuletzt bekannte Rolle
+    }
+    if (rolle === "App-Admin") {
+      // Ist Zwei-Faktor eingerichtet, aber in dieser Sitzung nicht bestätigt: neu anmelden.
+      try {
+        const { data: aal } = await sb.auth.mfa.getAuthenticatorAssuranceLevel();
+        if (aal && aal.nextLevel === "aal2" && aal.currentLevel !== "aal2") return;
+      } catch (e) { return; }
     }
     if (rolle) state.session = rolle;
   } catch (e) {}
