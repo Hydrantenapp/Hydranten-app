@@ -1740,7 +1740,7 @@ function renderDaten() {
     <h2 style="font-weight:600;margin:0 0 4px;">Daten verwalten</h2>
     <p style="font-size:13px;color:#6b7280;margin:0 0 16px;">${state.hydranten.length} Hydranten lokal gespeichert.</p>
     <div class="card">
-      <div class="readonly-note">🔒 Excel-Import und -Export sind nur für Vollzugriffs-Rollen (Einsatzleitung, Stadtwerke, Wehrführung, App-Admin) verfügbar.</div>
+      <div class="readonly-note">🔒 Excel-Import und -Export sind nur für den App-Admin verfügbar.</div>
     </div>
   `;
 }
@@ -2321,16 +2321,6 @@ function renderDatenEinsatzleitung() {
 function renderDatenEingeschraenkt() {
   const kannNeuAnlegen = canEditStammdaten(state.session);
   const datenInhalt = `
-    <div class="card" style="box-shadow:none;border:1px solid #e5e7eb;">
-      <div style="display:flex;gap:12px;align-items:center;margin-bottom:12px;">
-        <div class="hydrant-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></div>
-        <div>
-          <div style="font-weight:600;font-size:14px;">Als Excel exportieren</div>
-          <div style="font-size:12px;color:#6b7280;">Alle Hydranten als .xlsx-Datei</div>
-        </div>
-      </div>
-      <button id="btn-export" class="btn btn-outline btn-full">Export starten</button>
-    </div>
     ${kannNeuAnlegen ? `
     <button type="button" id="btn-daten-neu-hydrant" class="btn btn-primary btn-full">+ Neuen Hydranten anlegen</button>
     <p style="font-size:11px;color:#9CA3AF;margin:8px 0 0;">Neu angelegte Hydranten erscheinen automatisch beim App-Admin, der ihnen dann einen Bezirk zuordnet.</p>
@@ -2339,7 +2329,7 @@ function renderDatenEingeschraenkt() {
 
   const archivInhalt = `
     <p style="font-size:12px;color:#6b7280;margin:0 0 12px;">
-      Am 30.09. eines Jahres legt der Server automatisch einen Datenstand-Snapshot an (ohne Fotos). Von hier aus als Excel-Datei herunterladen und selbst in eurem Archivordner ablegen.
+      Am 30.09. eines Jahres legt der Server automatisch einen Datenstand-Snapshot an (ohne Fotos). Den Download übernimmt der App-Admin.
     </p>
     ${state.archivListe.length === 0
       ? `<p style="font-size:13px;color:#9CA3AF;margin:0;">Noch kein Jahresarchiv vorhanden.</p>`
@@ -2349,7 +2339,6 @@ function renderDatenEingeschraenkt() {
               <div style="font-weight:600;font-size:14px;">Jahresarchiv ${a.jahr}</div>
               <div style="font-size:11.5px;color:#9CA3AF;">${a.hydranten.length} Hydranten · erstellt am ${esc(new Date(a.erstelltAm).toLocaleDateString("de-DE"))}</div>
             </div>
-            <button type="button" class="btn btn-outline btn-archiv-download" data-jahr="${a.jahr}">Herunterladen</button>
           </div>
         `).join("")
     }
@@ -2719,7 +2708,7 @@ function attachHandlers() {
     });
     document.querySelectorAll(".btn-archiv-download").forEach((btn) => {
       btn.addEventListener("click", () => {
-        if (!isSonderrolle(state.session)) return;
+        if (state.session !== "App-Admin") return;
         const jahr = parseInt(btn.dataset.jahr, 10);
         const archiv = state.archivListe.find((a) => a.jahr === jahr);
         if (!archiv) return;
@@ -3304,7 +3293,7 @@ function exportHydrantenAlsExcel(hydrantenListe, dateiname, historieMap) {
 }
 
 async function exportExcel() {
-  if (!isSonderrolle(state.session)) { showToast("Export ist nur für Vollzugriffs-Rollen verfügbar"); return; }
+  if (state.session !== "App-Admin") { showToast("Export ist nur für den App-Admin verfügbar"); return; }
   let historieMap = null;
   if (sb && navigator.onLine) {
     try {
@@ -4138,6 +4127,20 @@ async function stelleSitzungWiederHer() {
     if (rolle) state.session = rolle;
   } catch (e) {}
 }
+
+/* ---------- Automatische Abmeldung nach längerer Inaktivität ---------- */
+const INAKTIV_LIMIT_MS = 60 * 60 * 1000; // 60 Minuten ohne Bedienung
+let letzteAktivitaet = Date.now();
+["pointerdown", "keydown", "touchstart", "wheel"].forEach((ev) =>
+  document.addEventListener(ev, () => { letzteAktivitaet = Date.now(); }, { passive: true, capture: true }));
+function pruefeInaktivitaet() {
+  if (!state.session) { letzteAktivitaet = Date.now(); return; }
+  if (Date.now() - letzteAktivitaet > INAKTIV_LIMIT_MS) {
+    handleLogout().then(() => showToast("Aus Sicherheitsgründen abgemeldet (lange nicht bedient)"));
+  }
+}
+setInterval(pruefeInaktivitaet, 60000);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) pruefeInaktivitaet(); });
 
 async function handleLogout() {
   try { await Promise.race([syncAlles(), new Promise((r) => setTimeout(r, 3000))]); } catch (e) {}
